@@ -9,7 +9,7 @@
 
 | 대상 | 규칙 | 예시 |
 |------|------|------|
-| 변수 (필드, 지역 변수, 매개변수) | camelCase (소문자로 시작) | `_moveSpeed`, `_currentHp`, `_targetPos` |
+| 변수 (필드, 지역 변수, 매개변수) | _camelCase (소문자로 시작) | `_moveSpeed`, `_currentHp`, `_targetPos` |
 | 클래스 | PascalCase (대문자로 시작) | `PlayerController`, `ItemData` |
 | 메서드 | PascalCase (대문자로 시작) | `TakeDamage()`, `MovePlayer()` |
 | 상수 | 전부 대문자, 단어 사이는 `_` | `MAX_HP`, `MAX_INVENTORY_SIZE` |
@@ -21,26 +21,26 @@ public class PlayerController : MonoBehaviour
 {
     public const int MAX_HP = 100;
 
-    [SerializeField] private float moveSpeed = 5f;
+    [SerializeField] private float _moveSpeed = 5f;
 
-    private int currentHp;
-    private bool isDead;
-    private Rigidbody2D rigidbody2d;
+    private int _currentHp;
+    private bool _isDead;
+    private Rigidbody2D _rigidbody2d;
 
     private void Awake()
     {
-        rigidbody2d = GetComponent<Rigidbody2D>();
-        currentHp = MAX_HP;
+        _rigidbody2d = GetComponent<Rigidbody2D>();
+        _currentHp = MAX_HP;
     }
 
-    public void TakeDamage(int damageAmount)
+    public void TakeDamage(int _damageAmount)
     {
-        if (isDead) return;
+        if (_isDead) return;
 
-        currentHp -= damageAmount;
-        if (currentHp <= 0)
+        _currentHp -= _damageAmount;
+        if (_currentHp <= 0)
         {
-            isDead = true;
+            _isDead = true;
         }
     }
 }
