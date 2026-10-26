@@ -9,7 +9,7 @@
 
 | 대상 | 규칙 | 예시 |
 |------|------|------|
-| 변수 (필드, 지역 변수, 매개변수) | camelCase (소문자로 시작) | `moveSpeed`, `currentHp`, `targetPos` |
+| 변수 (필드, 지역 변수, 매개변수) | camelCase (소문자로 시작) | `_moveSpeed`, `_currentHp`, `_targetPos` |
 | 클래스 | PascalCase (대문자로 시작) | `PlayerController`, `ItemData` |
 | 메서드 | PascalCase (대문자로 시작) | `TakeDamage()`, `MovePlayer()` |
 | 상수 | 전부 대문자, 단어 사이는 `_` | `MAX_HP`, `MAX_INVENTORY_SIZE` |
