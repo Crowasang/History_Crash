@@ -107,3 +107,12 @@ InitTestScene*.unity*
 
 # Auto-generated cache in Assets folder
 /[Aa]ssets/[Ss]ceneDependencyCache*
+
+# 팀원이 각자 설치하는 플러그인 (docs/PLUGIN_SETUP.md 참고)
+# NuGet 패키지: packages.config 기준으로 NuGetForUnity가 자동 복원
+/[Aa]ssets/Packages/
+/[Aa]ssets/Packages.meta
+# DOTween: 에셋 스토어에서 각자 임포트
+/[Aa]ssets/Plugins/Demigiant/
+/[Aa]ssets/Plugins/Demigiant.meta
+/[Aa]ssets/Plugins.meta
