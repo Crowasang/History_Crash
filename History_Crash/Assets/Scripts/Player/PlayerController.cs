@@ -10,7 +10,8 @@ using UnityEngine.InputSystem;
 public class PlayerController : MonoBehaviour
 {
     [SerializeField] private InputActionReference _moveAction;
-    [SerializeField] private float _moveSpeed = 5f;
+    [Tooltip("이동 속도 (타일/초)")]
+    [SerializeField] private float _moveSpeed = 3f;
 
     [Header("Debug")]
     [SerializeField] private float _forwardRayDistance = 10f;
@@ -23,13 +24,13 @@ public class PlayerController : MonoBehaviour
         _rb.freezeRotation = true;
 
         // 바닥 마찰 때문에 속도가 줄지 않도록 마찰 0
-        PhysicsMaterial noFriction = new PhysicsMaterial("NoFriction")
+        PhysicsMaterial _noFriction = new PhysicsMaterial("NoFriction")
         {
             dynamicFriction = 0f,
             staticFriction = 0f,
             frictionCombine = PhysicsMaterialCombine.Minimum
         };
-        GetComponent<CapsuleCollider>().material = noFriction;
+        GetComponent<CapsuleCollider>().material = _noFriction;
     }
 
     private void OnEnable()
@@ -47,38 +48,38 @@ public class PlayerController : MonoBehaviour
     }
 
     // 입력이 바뀔 때만 호출됨 (키를 떼면 canceled로 (0, 0)이 들어옴)
-    private void OnMove(InputAction.CallbackContext context)
+    private void OnMove(InputAction.CallbackContext _context)
     {
-        Vector2 input = context.ReadValue<Vector2>();
-        Vector3 moveDir = new Vector3(input.x, 0f, input.y);
+        Vector2 _input = _context.ReadValue<Vector2>();
+        Vector3 _moveDir = new Vector3(_input.x, 0f, _input.y);
 
         // 이동 방향으로 회전
-        if (moveDir.sqrMagnitude > 0.01f)
+        if (_moveDir.sqrMagnitude > 0.01f)
         {
-            _rb.MoveRotation(Quaternion.LookRotation(moveDir));
+            _rb.MoveRotation(Quaternion.LookRotation(_moveDir));
         }
 
         // 낙하 속도(y)는 유지하고 수평 속도만 바꿈
-        Vector3 velocity = moveDir * _moveSpeed;
-        velocity.y = _rb.linearVelocity.y;
-        _rb.linearVelocity = velocity;
+        Vector3 _velocity = _moveDir * _moveSpeed;
+        _velocity.y = _rb.linearVelocity.y;
+        _rb.linearVelocity = _velocity;
     }
 
     // 바라보는 방향 표시: 맞으면 빨간색(맞은 지점까지), 안 맞으면 초록색
     private void OnDrawGizmos()
     {
-        Vector3 origin = transform.position;
-        Vector3 direction = transform.forward;
+        Vector3 _origin = transform.position;
+        Vector3 _direction = transform.forward;
 
-        if (Physics.Raycast(origin, direction, out RaycastHit hit, _forwardRayDistance))
+        if (Physics.Raycast(_origin, _direction, out RaycastHit _hit, _forwardRayDistance))
         {
             Gizmos.color = Color.red;
-            Gizmos.DrawLine(origin, hit.point);
+            Gizmos.DrawLine(_origin, _hit.point);
         }
         else
         {
             Gizmos.color = Color.green;
-            Gizmos.DrawRay(origin, direction * _forwardRayDistance);
+            Gizmos.DrawRay(_origin, _direction * _forwardRayDistance);
         }
     }
 }
