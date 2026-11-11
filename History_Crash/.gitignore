@@ -116,3 +116,9 @@ InitTestScene*.unity*
 /[Aa]ssets/Plugins/Demigiant/
 /[Aa]ssets/Plugins/Demigiant.meta
 /[Aa]ssets/Plugins.meta
+# DOTween 설정 파일: 각자 DOTween Utility Panel에서 Setup 시 자동 생성되므로 커밋하지 않음
+/[Aa]ssets/[Rr]esources/DOTweenSettings.asset
+/[Aa]ssets/[Rr]esources/DOTweenSettings.asset.meta
+# Art: 폴더 자체는 공유하고, 안의 아트 에셋 파일들은 git으로 관리하지 않음 (각자 공유받아 배치)
+/[Aa]ssets/[Aa]rt/*
+!/[Aa]ssets/[Aa]rt/.gitkeep
