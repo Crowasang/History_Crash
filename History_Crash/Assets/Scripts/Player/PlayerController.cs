@@ -3,10 +3,10 @@ using UnityEngine.InputSystem;
 
 /// <summary>
 /// New Input System의 Move 액션(WASD / 방향키 / 게임패드 스틱)으로 플레이어를 이동시킵니다.
-/// 입력이 바뀔 때만 Rigidbody 속도를 바꾸고, 이후 이동과 중력은 물리 엔진이 처리합니다.
-/// 이동 방향은 월드 기준 XZ 평면입니다.
+/// 이동 방향은 시점(PlayerLook) 기준입니다. W = 보고 있는 방향.
+/// 입력이나 시점이 바뀔 때만 Rigidbody 속도를 바꾸고, 이후 이동과 중력은 물리 엔진이 처리합니다.
 /// </summary>
-[RequireComponent(typeof(Rigidbody), typeof(CapsuleCollider))]
+[RequireComponent(typeof(Rigidbody), typeof(CapsuleCollider), typeof(PlayerLook))]
 public class PlayerController : MonoBehaviour
 {
     [SerializeField] private InputActionReference _moveAction;
@@ -17,11 +17,14 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private float _forwardRayDistance = 10f;
 
     private Rigidbody _rb;
+    private PlayerLook _look;
+    private Vector2 _moveInput;
 
     private void Awake()
     {
         _rb = GetComponent<Rigidbody>();
         _rb.freezeRotation = true;
+        _look = GetComponent<PlayerLook>();
 
         // 바닥 마찰 때문에 속도가 줄지 않도록 마찰 0
         PhysicsMaterial _noFriction = new PhysicsMaterial("NoFriction")
@@ -38,6 +41,7 @@ public class PlayerController : MonoBehaviour
         _moveAction.action.performed += OnMove;
         _moveAction.action.canceled += OnMove;
         _moveAction.action.Enable();
+        _look.OnLookChanged += ApplyVelocity;
     }
 
     private void OnDisable()
@@ -45,19 +49,22 @@ public class PlayerController : MonoBehaviour
         _moveAction.action.performed -= OnMove;
         _moveAction.action.canceled -= OnMove;
         _moveAction.action.Disable();
+        _look.OnLookChanged -= ApplyVelocity;
+        _moveInput = Vector2.zero;
     }
 
     // 입력이 바뀔 때만 호출됨 (키를 떼면 canceled로 (0, 0)이 들어옴)
     private void OnMove(InputAction.CallbackContext _context)
     {
-        Vector2 _input = _context.ReadValue<Vector2>();
-        Vector3 _moveDir = new Vector3(_input.x, 0f, _input.y);
+        _moveInput = _context.ReadValue<Vector2>();
+        ApplyVelocity();
+    }
 
-        // 이동 방향으로 회전
-        if (_moveDir.sqrMagnitude > 0.01f)
-        {
-            _rb.MoveRotation(Quaternion.LookRotation(_moveDir));
-        }
+    // 입력이나 시점이 바뀔 때 이동 속도를 다시 계산
+    private void ApplyVelocity()
+    {
+        // 시점의 좌우 각도 기준으로 입력을 돌림 (W = 보고 있는 방향)
+        Vector3 _moveDir = Quaternion.Euler(0f, _look.Yaw, 0f) * new Vector3(_moveInput.x, 0f, _moveInput.y);
 
         // 낙하 속도(y)는 유지하고 수평 속도만 바꿈
         Vector3 _velocity = _moveDir * _moveSpeed;
