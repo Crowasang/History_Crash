@@ -5,13 +5,13 @@ using UnityEngine;
 /// 체력 컴포넌트. 플레이어(하트 5칸), 미라(HP 100), 파라오(HP 1200) 모두 이것 하나로 처리합니다.
 /// - 체력 변화와 사망은 R3 이벤트로 알립니다. (UI, 연출, 게임 흐름이 구독)
 /// - 피격 후 무적 시간을 설정할 수 있습니다. (플레이어 1초)
-/// - 오브젝트 풀에서 다시 꺼낼 때 ResetHealth()로 초기화합니다.
+/// - 오브젝트 풀에서 다시 꺼내지면 체력이 자동으로 초기화됩니다. (IPoolable)
 /// </summary>
 /// <example>
 /// _health.CurrentHp.Subscribe(_hp => UpdateHeartUI(_hp)).AddTo(this);
 /// _health.OnDeath.Subscribe(_ => PlayDeathEffect()).AddTo(this);
 /// </example>
-public class Health : MonoBehaviour, IDamageable
+public class Health : MonoBehaviour, IDamageable, IPoolable
 {
     [SerializeField] private int _maxHp = 100;
 
@@ -80,11 +80,20 @@ public class Health : MonoBehaviour, IDamageable
     }
 
     /// <summary>
-    /// 체력을 최대로 되돌리고 무적을 해제합니다. 풀에서 다시 꺼낼 때 호출합니다.
+    /// 체력을 최대로 되돌리고 무적을 해제합니다. (풀에서 꺼내질 때는 자동 호출)
     /// </summary>
     public void ResetHealth()
     {
         _currentHp.Value = _maxHp;
         _invincibleEndTime = 0f;
+    }
+
+    public void OnSpawned()
+    {
+        ResetHealth();
+    }
+
+    public void OnDespawned()
+    {
     }
 }
