@@ -10,7 +10,7 @@ using UnityEngine.InputSystem;
 /// 마우스가 움직일 때만 처리합니다. (Update 없음)
 /// </summary>
 [RequireComponent(typeof(Rigidbody))]
-public class PlayerLook : MonoBehaviour
+public class PlayerLook : MonoBehaviour, ILookDirection
 {
     [SerializeField] private InputActionReference _lookAction;
     [Tooltip("Cinemachine 카메라가 따라가는 어깨 높이 기준점 (플레이어 자식)")]
