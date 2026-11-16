@@ -10,10 +10,14 @@ using UnityEngine.Pool;
 /// - 프리팹별 풀은 처음 Spawn할 때 자동으로 만들어집니다.
 /// </summary>
 /// <example>
-/// Mummy _mummy = PoolManager.Instance.Spawn(_mummyPrefab, _spawnPos, Quaternion.identity);
-/// PoolManager.Instance.Release(_mummy.gameObject);
+/// // 다른 스크립트는 PoolManager 대신 IPoolService로 받습니다. (인스펙터에 PoolManager 연결)
+/// [SerializeField] private MonoBehaviour _poolSource;
+/// IPoolService _pool = InterfaceRef.Resolve&lt;IPoolService&gt;(_poolSource, this, nameof(_poolSource));
+///
+/// Mummy _mummy = _pool.Spawn(_mummyPrefab, _spawnPos, Quaternion.identity);
+/// _pool.Release(_mummy.gameObject);
 /// </example>
-public class PoolManager : MonoBehaviour
+public class PoolManager : MonoBehaviour, IPoolService
 {
     [Serializable]
     private class PrewarmEntry
