@@ -28,6 +28,10 @@ public class PlayerLook : MonoBehaviour, ILookDirection
     [Tooltip("조준 레이 최대 거리. 아무것도 안 맞으면 이 거리의 지점을 조준")]
     [SerializeField] private float _aimDistance = 100f;
 
+    // 조준 레이 결과를 담는 배열. 마우스가 움직일 때마다 새로 만들지 않고 재사용 (GC 방지)
+    private const int AIM_HIT_BUFFER_SIZE = 16;
+    private readonly RaycastHit[] _aimHits = new RaycastHit[AIM_HIT_BUFFER_SIZE];
+
     private Rigidbody _rb;
     private float _yaw;
     private float _pitch;
@@ -96,12 +100,13 @@ public class PlayerLook : MonoBehaviour, ILookDirection
         Ray _ray = _camera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
         AimPoint = _ray.GetPoint(_aimDistance);
 
-        // 가장 가까운 지점부터 보되, 플레이어 자기 몸(자식 포함)은 건너뜀
-        RaycastHit[] _hits = Physics.RaycastAll(_ray, _aimDistance, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+        // 가장 가까운 지점을 고르되, 플레이어 자기 몸(자식 포함)은 건너뜀
+        int _hitCount = Physics.RaycastNonAlloc(_ray, _aimHits, _aimDistance, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
         float _closest = float.MaxValue;
-        foreach (RaycastHit _hit in _hits)
+        for (int _i = 0; _i < _hitCount; _i++)
         {
-            if (_hit.transform.IsChildOf(transform) || _hit.distance >= _closest) continue;
+            RaycastHit _hit = _aimHits[_i];
+            if (_hit.distance >= _closest || _hit.transform.IsChildOf(transform)) continue;
 
             _closest = _hit.distance;
             AimPoint = _hit.point;
