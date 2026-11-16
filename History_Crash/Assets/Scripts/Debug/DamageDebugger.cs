@@ -7,8 +7,12 @@ using UnityEngine;
 /// </summary>
 public class DamageDebugger : MonoBehaviour
 {
-    [SerializeField] private Health _playerHealth;
-    [SerializeField] private Health _bossHealth;
+    [Tooltip("IDamageable을 구현한 컴포넌트 (Health)")]
+    [SerializeField] private MonoBehaviour _playerHealth;
+    [Tooltip("IDamageable을 구현한 컴포넌트 (Health)")]
+    [SerializeField] private MonoBehaviour _bossHealth;
+    [Tooltip("IGameFlow를 구현한 컴포넌트 (GameManager). 비우면 같은 오브젝트에서 찾음")]
+    [SerializeField] private MonoBehaviour _gameFlowSource;
 
     [Tooltip("보스 피해량 (미라 1킬 = 20)")]
     [SerializeField] private int _bossDamage = 20;
@@ -16,28 +20,28 @@ public class DamageDebugger : MonoBehaviour
     [ContextMenu("보스에 피해 (미라 1킬)")]
     private void DamageBoss()
     {
-        Damage(_bossHealth, _bossDamage);
+        Damage(_bossHealth, nameof(_bossHealth), _bossDamage);
     }
 
     [ContextMenu("보스 즉시 처치")]
     private void KillBoss()
     {
-        Damage(_bossHealth, int.MaxValue);
+        Damage(_bossHealth, nameof(_bossHealth), int.MaxValue);
     }
 
     [ContextMenu("플레이어에 1 피해")]
     private void DamagePlayer()
     {
-        Damage(_playerHealth, 1);
+        Damage(_playerHealth, nameof(_playerHealth), 1);
     }
 
     [ContextMenu("플레이어 즉시 처치")]
     private void KillPlayer()
     {
-        Damage(_playerHealth, int.MaxValue);
+        Damage(_playerHealth, nameof(_playerHealth), int.MaxValue);
     }
 
-    private void Damage(Health _target, int _amount)
+    private void Damage(MonoBehaviour _source, string _fieldName, int _amount)
     {
         if (!Application.isPlaying)
         {
@@ -45,20 +49,25 @@ public class DamageDebugger : MonoBehaviour
             return;
         }
 
+        IDamageable _target = InterfaceRef.Resolve<IDamageable>(_source, this, _fieldName);
         if (_target == null)
         {
-            Debug.LogWarning("[DamageDebugger] 대상 Health가 연결되지 않았습니다.");
+            Debug.LogWarning($"[DamageDebugger] {_fieldName}이(가) 연결되지 않았습니다.");
             return;
         }
 
         // 준비 상태(시작 후 대기 중)나 이미 끝난 뒤에는 죽어도 승패로 치지 않음
-        GameManager _gameManager = GameManager.Instance;
-        if (_gameManager != null && !_gameManager.IsPlaying)
+        IGameFlow _gameFlow = InterfaceRef.Resolve<IGameFlow>(_gameFlowSource, this, nameof(_gameFlowSource))
+            ?? GetComponent<IGameFlow>();
+        if (_gameFlow != null && !_gameFlow.IsPlaying)
         {
-            Debug.LogWarning($"[DamageDebugger] 지금은 진행 상태가 아니라 승패에 반영되지 않습니다. (현재 상태: {_gameManager.CurrentState.CurrentValue})");
+            Debug.LogWarning($"[DamageDebugger] 지금은 진행 상태가 아니라 승패에 반영되지 않습니다. (현재 상태: {_gameFlow.CurrentState.CurrentValue})");
         }
 
         _target.TakeDamage(new DamageInfo(_amount, ElementType.None, gameObject));
-        Debug.Log($"[DamageDebugger] {_target.name}에 {(_amount == int.MaxValue ? "즉사" : _amount.ToString())} 피해 → 남은 체력 {_target.CurrentHp.CurrentValue}");
+
+        string _amountText = _amount == int.MaxValue ? "즉사" : _amount.ToString();
+        string _hpText = _source is IHealthReadOnly _health ? _health.CurrentHp.CurrentValue.ToString() : "?";
+        Debug.Log($"[DamageDebugger] {_source.name}에 {_amountText} 피해 → 남은 체력 {_hpText}");
     }
 }
