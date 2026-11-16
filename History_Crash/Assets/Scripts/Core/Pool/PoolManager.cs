@@ -82,7 +82,8 @@ public class PoolManager : MonoBehaviour, IPoolService
         _instance.gameObject.SetActive(true);
         _instance.NotifySpawned();
 
-        return _instance.GetComponent<T>();
+        // PooledObject 자체를 달라고 한 경우엔 컴포넌트 검색 생략
+        return _instance as T ?? _instance.GetComponent<T>();
     }
 
     /// <summary>
