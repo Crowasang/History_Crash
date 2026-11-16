@@ -121,8 +121,10 @@ public class SpawnManager : MonoBehaviour
     {
         foreach (List<PooledObject> _list in _spawnedByEntry.Values)
         {
-            foreach (PooledObject _pooled in _list.ToArray())
+            // 복사본을 만들지 않고 뒤에서부터 돌기 (반납 중에 목록이 바뀌어도 안전)
+            for (int _i = _list.Count - 1; _i >= 0; _i--)
             {
+                PooledObject _pooled = _list[_i];
                 if (_pooled != null && _pooled.IsSpawned)
                 {
                     _pooled.Release();
