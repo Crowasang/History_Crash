@@ -7,17 +7,23 @@ using UnityEngine;
 
 /// <summary>
 /// 몬스터를 주기적으로 생성합니다. 씬에 하나만 둡니다.
-/// - GameManager가 진행 상태일 때만 생성하고, 클리어하면 소환된 몹을 모두 풀로 돌려보냅니다.
-/// - 생성은 PoolManager를 통해 합니다.
+/// - 게임이 진행 상태일 때만 생성하고, 클리어하면 소환된 몹을 모두 풀로 돌려보냅니다.
+/// - 게임 상태는 IGameFlow(GameManager), 생성은 IPoolService(PoolManager)를 인스펙터로 연결해서 씁니다.
 /// - 생성 규칙(프리팹, 주기, 위치)은 인스펙터의 Spawn Entries에 등록합니다.
 /// </summary>
 /// <example>
 /// // 생성될 때마다 알림 받기 (예: 미라에 속성 부여)
-/// SpawnManager.Instance.OnSpawned.Subscribe(_go => ...).AddTo(this);
+/// _spawnManager.OnSpawned.Subscribe(_go => ...).AddTo(this);
 /// </example>
 public class SpawnManager : MonoBehaviour
 {
+    [Tooltip("IGameFlow를 구현한 컴포넌트 (GameManager). 비우면 바로 생성 시작")]
+    [SerializeField] private MonoBehaviour _gameFlowSource;
+    [Tooltip("IPoolService를 구현한 컴포넌트 (PoolManager)")]
+    [SerializeField] private MonoBehaviour _poolSource;
     [SerializeField] private List<SpawnEntry> _spawnEntries = new List<SpawnEntry>();
+
+    private IPoolService _pool;
 
     private readonly Subject<GameObject> _onSpawned = new Subject<GameObject>();
     private readonly Dictionary<SpawnEntry, List<PooledObject>> _spawnedByEntry =
@@ -43,14 +49,17 @@ public class SpawnManager : MonoBehaviour
 
     private void Start()
     {
-        if (GameManager.Instance == null)
+        _pool = InterfaceRef.Resolve<IPoolService>(_poolSource, this, nameof(_poolSource));
+
+        IGameFlow _gameFlow = InterfaceRef.Resolve<IGameFlow>(_gameFlowSource, this, nameof(_gameFlowSource));
+        if (_gameFlow == null)
         {
-            Debug.LogWarning("[SpawnManager] GameManager가 없어 바로 생성을 시작합니다.");
+            Debug.LogWarning("[SpawnManager] 게임 흐름(GameManager)이 연결되지 않아 바로 생성을 시작합니다.");
             StartSpawning();
             return;
         }
 
-        GameManager.Instance.CurrentState
+        _gameFlow.CurrentState
             .Subscribe(OnGameStateChanged)
             .AddTo(this);
     }
@@ -147,14 +156,14 @@ public class SpawnManager : MonoBehaviour
 
     private void Spawn(SpawnEntry _entry)
     {
-        if (PoolManager.Instance == null)
+        if (_pool == null)
         {
-            Debug.LogError("[SpawnManager] 씬에 PoolManager가 없습니다.");
+            Debug.LogError("[SpawnManager] 풀(PoolManager)이 연결되지 않았습니다.");
             return;
         }
 
         Vector3 _position = _entry.PickPosition(transform.position);
-        PooledObject _instance = PoolManager.Instance.Spawn(_entry.Prefab, _position, Quaternion.identity);
+        PooledObject _instance = _pool.Spawn(_entry.Prefab, _position, Quaternion.identity);
         if (_instance == null) return;
 
         CountAlive(_entry); // 반납된 항목 정리 (목록이 계속 커지지 않도록)

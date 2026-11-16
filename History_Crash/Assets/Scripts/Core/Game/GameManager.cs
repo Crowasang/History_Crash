@@ -12,21 +12,22 @@ using UnityEngine;
 /// - 경과 시간: 진행 상태에서만 흐르고, UI용으로 1초마다 알림
 /// </summary>
 /// <example>
+/// // 다른 스크립트는 GameManager 대신 IGameFlow로 받습니다. (인스펙터에 GameManager 연결)
+/// [SerializeField] private MonoBehaviour _gameFlowSource;
+/// IGameFlow _gameFlow = InterfaceRef.Resolve&lt;IGameFlow&gt;(_gameFlowSource, this, nameof(_gameFlowSource));
+///
 /// // 진행 중일 때만 미라 리젠
-/// GameManager.Instance.CurrentState
+/// _gameFlow.CurrentState
 ///     .Subscribe(_state => SetSpawning(_state == GameStateType.Playing))
 ///     .AddTo(this);
-///
-/// // 경과 시간 UI
-/// GameManager.Instance.ElapsedSeconds
-///     .Subscribe(_sec => _timerText.text = $"{_sec / 60:00}:{_sec % 60:00}")
-///     .AddTo(this);
 /// </example>
-public class GameManager : MonoBehaviour
+public class GameManager : MonoBehaviour, IGameFlow
 {
     [Header("Win / Lose")]
-    [SerializeField] private Health _playerHealth;
-    [SerializeField] private Health _bossHealth;
+    [Tooltip("IHealthReadOnly를 구현한 컴포넌트 (Health)")]
+    [SerializeField] private MonoBehaviour _playerHealth;
+    [Tooltip("IHealthReadOnly를 구현한 컴포넌트 (Health)")]
+    [SerializeField] private MonoBehaviour _bossHealth;
 
     [Header("Flow")]
     [Tooltip("시작 전 대기 시간 (초)")]
@@ -83,17 +84,19 @@ public class GameManager : MonoBehaviour
 
     private void Start()
     {
-        if (_bossHealth != null)
+        IHealthReadOnly _boss = InterfaceRef.Resolve<IHealthReadOnly>(_bossHealth, this, nameof(_bossHealth));
+        if (_boss != null)
         {
-            _bossHealth.OnDeath
+            _boss.OnDeath
                 .Where(_ => IsPlaying)
                 .Subscribe(_ => ChangeState(GameStateType.Clear))
                 .AddTo(this);
         }
 
-        if (_playerHealth != null)
+        IHealthReadOnly _player = InterfaceRef.Resolve<IHealthReadOnly>(_playerHealth, this, nameof(_playerHealth));
+        if (_player != null)
         {
-            _playerHealth.OnDeath
+            _player.OnDeath
                 .Where(_ => IsPlaying)
                 .Subscribe(_ => ChangeState(GameStateType.Fail))
                 .AddTo(this);

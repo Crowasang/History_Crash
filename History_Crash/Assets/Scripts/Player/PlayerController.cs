@@ -3,10 +3,11 @@ using UnityEngine.InputSystem;
 
 /// <summary>
 /// New Input System의 Move 액션(WASD / 방향키 / 게임패드 스틱)으로 플레이어를 이동시킵니다.
-/// 이동 방향은 시점(PlayerLook) 기준입니다. W = 보고 있는 방향.
+/// 이동 방향은 시점(ILookDirection, 보통 PlayerLook) 기준입니다. W = 보고 있는 방향.
 /// 입력이나 시점이 바뀔 때만 Rigidbody 속도를 바꾸고, 이후 이동과 중력은 물리 엔진이 처리합니다.
+/// 같은 오브젝트에 ILookDirection을 구현한 컴포넌트가 있어야 합니다.
 /// </summary>
-[RequireComponent(typeof(Rigidbody), typeof(CapsuleCollider), typeof(PlayerLook))]
+[RequireComponent(typeof(Rigidbody), typeof(CapsuleCollider))]
 public class PlayerController : MonoBehaviour
 {
     [SerializeField] private InputActionReference _moveAction;
@@ -17,14 +18,19 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private float _forwardRayDistance = 10f;
 
     private Rigidbody _rb;
-    private PlayerLook _look;
+    private ILookDirection _look;
     private Vector2 _moveInput;
 
     private void Awake()
     {
         _rb = GetComponent<Rigidbody>();
         _rb.freezeRotation = true;
-        _look = GetComponent<PlayerLook>();
+
+        _look = GetComponent<ILookDirection>();
+        if (_look == null)
+        {
+            Debug.LogError($"[PlayerController] {name}에 ILookDirection(PlayerLook 등) 컴포넌트가 없습니다.", this);
+        }
 
         // 바닥 마찰 때문에 속도가 줄지 않도록 마찰 0
         PhysicsMaterial _noFriction = new PhysicsMaterial("NoFriction")
@@ -41,7 +47,7 @@ public class PlayerController : MonoBehaviour
         _moveAction.action.performed += OnMove;
         _moveAction.action.canceled += OnMove;
         _moveAction.action.Enable();
-        _look.OnLookChanged += ApplyVelocity;
+        if (_look != null) _look.OnLookChanged += ApplyVelocity;
     }
 
     private void OnDisable()
@@ -49,7 +55,7 @@ public class PlayerController : MonoBehaviour
         _moveAction.action.performed -= OnMove;
         _moveAction.action.canceled -= OnMove;
         _moveAction.action.Disable();
-        _look.OnLookChanged -= ApplyVelocity;
+        if (_look != null) _look.OnLookChanged -= ApplyVelocity;
         _moveInput = Vector2.zero;
     }
 
@@ -64,7 +70,8 @@ public class PlayerController : MonoBehaviour
     private void ApplyVelocity()
     {
         // 시점의 좌우 각도 기준으로 입력을 돌림 (W = 보고 있는 방향)
-        Vector3 _moveDir = Quaternion.Euler(0f, _look.Yaw, 0f) * new Vector3(_moveInput.x, 0f, _moveInput.y);
+        float _yaw = _look != null ? _look.Yaw : transform.eulerAngles.y;
+        Vector3 _moveDir = Quaternion.Euler(0f, _yaw, 0f) * new Vector3(_moveInput.x, 0f, _moveInput.y);
 
         // 낙하 속도(y)는 유지하고 수평 속도만 바꿈
         Vector3 _velocity = _moveDir * _moveSpeed;
