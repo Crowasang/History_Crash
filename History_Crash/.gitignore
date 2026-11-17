@@ -122,3 +122,6 @@ InitTestScene*.unity*
 # Art: 폴더 자체는 공유하고, 안의 아트 에셋 파일들은 git으로 관리하지 않음 (각자 공유받아 배치)
 /[Aa]ssets/[Aa]rt/*
 !/[Aa]ssets/[Aa]rt/.gitkeep
+
+# Resources: 안의 파일들(바르코 에셋 프리팹 등)은 git으로 관리하지 않음 (나중에 Art로 옮겨서 따로 공유 예정)
+/[Aa]ssets/[Rr]esources/*
