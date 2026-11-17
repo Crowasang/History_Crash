@@ -1,0 +1,65 @@
+# 줄바꿈 통일: 텍스트 파일은 저장소와 작업 폴더 모두 LF로 맞춤
+# (Unity가 씬·설정 파일을 LF로 저장하므로, 사람마다 다른 core.autocrlf 설정 때문에
+#  내용은 같은데 "변경됨"으로 뜨는 문제를 막음)
+* text=auto eol=lf
+
+# Unity 직렬화 파일 (Force Text 모드라 텍스트)
+*.unity        text eol=lf
+*.prefab       text eol=lf
+*.asset        text eol=lf
+*.meta         text eol=lf
+*.mat          text eol=lf
+*.anim         text eol=lf
+*.controller   text eol=lf
+*.overrideController text eol=lf
+*.physicMaterial text eol=lf
+*.physicsMaterial text eol=lf
+*.mask         text eol=lf
+*.inputactions text eol=lf
+*.shadergraph  text eol=lf
+*.shadersubgraph text eol=lf
+
+# 코드
+*.cs           text eol=lf diff=csharp
+*.shader       text eol=lf
+*.hlsl         text eol=lf
+*.cginc        text eol=lf
+*.json         text eol=lf
+*.xml          text eol=lf
+*.md           text eol=lf
+
+# 바이너리: 줄바꿈 변환 안 함
+*.png          binary
+*.jpg          binary
+*.jpeg         binary
+*.gif          binary
+*.psd          binary
+*.tga          binary
+*.tif          binary
+*.tiff         binary
+*.exr          binary
+*.hdr          binary
+*.fbx          binary
+*.obj          binary
+*.blend        binary
+*.glb          binary
+*.gltf         binary
+*.wav          binary
+*.mp3          binary
+*.ogg          binary
+*.aif          binary
+*.aiff         binary
+*.mp4          binary
+*.mov          binary
+*.ttf          binary
+*.otf          binary
+*.dll          binary
+*.so           binary
+*.a            binary
+*.exe          binary
+*.pdb          binary
+*.unitypackage binary
+*.zip          binary
+*.7z           binary
+*.cubemap      binary
+*.lighting     binary
