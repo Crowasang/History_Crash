@@ -15,7 +15,7 @@ using UnityEngine.SceneManagement;
 /// SceneLoader.Instance.LoadScene("Pharaoh");   // 씬 이름으로 전환
 /// SceneLoader.Instance.ReloadCurrent();        // 재시작 버튼
 /// </example>
-public class SceneLoader : MonoBehaviour
+public class SceneLoader : MonoBehaviour, ISceneLoader
 {
     [Tooltip("화면 전체를 덮는 페이드용 CanvasGroup (없으면 페이드 생략)")]
     [SerializeField] private CanvasGroup _fadeGroup;
