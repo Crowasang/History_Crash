@@ -2,29 +2,52 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 
 /// <summary>
-/// New Input System의 Move 액션(WASD / 방향키 / 게임패드 스틱)으로 플레이어를 이동시킵니다.
+/// New Input System의 Move 액션(WASD / 방향키 / 게임패드 스틱)으로 플레이어를 이동시키고, Jump 액션(Space)으로 점프합니다.
 /// 이동 방향은 시점(ILookDirection, 보통 PlayerLook) 기준입니다. W = 보고 있는 방향.
 /// 입력이나 시점이 바뀔 때만 Rigidbody 속도를 바꾸고, 이후 이동과 중력은 물리 엔진이 처리합니다.
+/// - 중력: 프로젝트 물리 설정 대신 ConstantForce로 이 플레이어에게만 적용 (기본 25, 기획 v19)
+/// - 점프: 바닥에 있을 때만, 높이 1.1m
 /// 같은 오브젝트에 ILookDirection을 구현한 컴포넌트가 있어야 합니다.
 /// </summary>
 [RequireComponent(typeof(Rigidbody), typeof(CapsuleCollider))]
-public class PlayerController : MonoBehaviour
+public class PlayerController : MonoBehaviour, IJumpState
 {
+    /// <summary>이 높이(m) 이상 떠 있으면 점프 회피로 판정 (기획 v19)</summary>
+    public const float JUMP_DODGE_HEIGHT = 0.45f;
+
+    private const float GROUND_CHECK_DISTANCE = 0.1f;
+    private const float HEIGHT_CHECK_MAX = 20f;
+
     [SerializeField] private InputActionReference _moveAction;
-    [Tooltip("이동 속도 (타일/초)")]
+    [SerializeField] private InputActionReference _jumpAction;
+    [Tooltip("이동 속도 (m/초)")]
     [SerializeField] private float _moveSpeed = 3f;
+
+    [Header("Jump")]
+    [Tooltip("점프 높이 (m)")]
+    [SerializeField] private float _jumpHeight = 1.1f;
+    [Tooltip("플레이어에게 적용할 중력 (m/초²)")]
+    [SerializeField] private float _gravity = 25f;
+    [Tooltip("공중에서 이동 속도 배율")]
+    [Range(0f, 1f)] [SerializeField] private float _airControl = 0.85f;
+    [Tooltip("바닥으로 인식할 레이어")]
+    [SerializeField] private LayerMask _groundMask = ~0;
 
     [Header("Debug")]
     [SerializeField] private float _forwardRayDistance = 10f;
 
     private Rigidbody _rb;
+    private CapsuleCollider _capsule;
     private ILookDirection _look;
     private Vector2 _moveInput;
+
+    public bool IsGrounded => CheckGrounded();
 
     private void Awake()
     {
         _rb = GetComponent<Rigidbody>();
         _rb.freezeRotation = true;
+        _capsule = GetComponent<CapsuleCollider>();
 
         _look = GetComponent<ILookDirection>();
         if (_look == null)
@@ -39,7 +62,9 @@ public class PlayerController : MonoBehaviour
             staticFriction = 0f,
             frictionCombine = PhysicsMaterialCombine.Minimum
         };
-        GetComponent<CapsuleCollider>().material = _noFriction;
+        _capsule.material = _noFriction;
+
+        ApplyGravity();
     }
 
     private void OnEnable()
@@ -47,6 +72,13 @@ public class PlayerController : MonoBehaviour
         _moveAction.action.performed += OnMove;
         _moveAction.action.canceled += OnMove;
         _moveAction.action.Enable();
+
+        if (_jumpAction != null)
+        {
+            _jumpAction.action.performed += OnJump;
+            _jumpAction.action.Enable();
+        }
+
         if (_look != null) _look.OnLookChanged += ApplyVelocity;
     }
 
@@ -55,6 +87,13 @@ public class PlayerController : MonoBehaviour
         _moveAction.action.performed -= OnMove;
         _moveAction.action.canceled -= OnMove;
         _moveAction.action.Disable();
+
+        if (_jumpAction != null)
+        {
+            _jumpAction.action.performed -= OnJump;
+            _jumpAction.action.Disable();
+        }
+
         if (_look != null) _look.OnLookChanged -= ApplyVelocity;
         _moveInput = Vector2.zero;
 
@@ -72,6 +111,24 @@ public class PlayerController : MonoBehaviour
         ApplyVelocity();
     }
 
+    // Space를 누를 때만 호출됨
+    private void OnJump(InputAction.CallbackContext _context)
+    {
+        Jump();
+    }
+
+    /// <summary>바닥에 있으면 점프합니다. (입력 외에 기믹·연출에서도 호출 가능)</summary>
+    public bool Jump()
+    {
+        if (!CheckGrounded()) return false;
+
+        // 원하는 높이 h에 도달하는 초기 속도 = √(2·g·h)
+        Vector3 _velocity = _rb.linearVelocity;
+        _velocity.y = Mathf.Sqrt(2f * _gravity * _jumpHeight);
+        _rb.linearVelocity = _velocity;
+        return true;
+    }
+
     // 입력이나 시점이 바뀔 때 이동 속도를 다시 계산
     private void ApplyVelocity()
     {
@@ -79,10 +136,65 @@ public class PlayerController : MonoBehaviour
         float _yaw = _look != null ? _look.Yaw : transform.eulerAngles.y;
         Vector3 _moveDir = Quaternion.Euler(0f, _yaw, 0f) * new Vector3(_moveInput.x, 0f, _moveInput.y);
 
+        // 공중에서는 이동 효과를 줄임
+        float _speed = CheckGrounded() ? _moveSpeed : _moveSpeed * _airControl;
+
         // 낙하 속도(y)는 유지하고 수평 속도만 바꿈
-        Vector3 _velocity = _moveDir * _moveSpeed;
+        Vector3 _velocity = _moveDir * _speed;
         _velocity.y = _rb.linearVelocity.y;
         _rb.linearVelocity = _velocity;
+    }
+
+    // 프로젝트 물리 설정(9.81)은 그대로 두고 이 플레이어에게만 중력 적용
+    private void ApplyGravity()
+    {
+        _rb.useGravity = false;
+
+        if (!TryGetComponent(out ConstantForce _constantForce))
+        {
+            _constantForce = gameObject.AddComponent<ConstantForce>();
+        }
+        _constantForce.force = Vector3.down * _gravity * _rb.mass;
+    }
+
+    public float GetHeightAboveGround()
+    {
+        GetCapsuleWorld(out Vector3 _center, out float _halfHeight, out float _);
+        Vector3 _feet = _center + Vector3.down * _halfHeight;
+
+        // 발보다 살짝 위에서 쏴서, 바닥에 딱 붙어 있어도 0으로 잡히게 함
+        const float START_OFFSET = 0.05f;
+        if (Physics.Raycast(_feet + Vector3.up * START_OFFSET, Vector3.down, out RaycastHit _hit,
+                HEIGHT_CHECK_MAX, _groundMask, QueryTriggerInteraction.Ignore))
+        {
+            return Mathf.Max(0f, _hit.distance - START_OFFSET);
+        }
+
+        return float.PositiveInfinity;
+    }
+
+    public bool IsDodgingByJump()
+    {
+        return GetHeightAboveGround() >= JUMP_DODGE_HEIGHT;
+    }
+
+    private bool CheckGrounded()
+    {
+        GetCapsuleWorld(out Vector3 _center, out float _halfHeight, out float _radius);
+
+        // 캡슐 중심에서 아래로 구를 쏴서 발밑에 바닥이 있는지 확인 (자기 콜라이더 안에서 시작하므로 자기 자신은 안 맞음)
+        float _castDistance = _halfHeight - _radius + GROUND_CHECK_DISTANCE;
+        return Physics.SphereCast(_center, _radius * 0.95f, Vector3.down, out RaycastHit _,
+            _castDistance, _groundMask, QueryTriggerInteraction.Ignore);
+    }
+
+    private void GetCapsuleWorld(out Vector3 _center, out float _halfHeight, out float _radius)
+    {
+        Vector3 _scale = transform.lossyScale;
+        _center = transform.TransformPoint(_capsule.center);
+        _halfHeight = _capsule.height * 0.5f * Mathf.Abs(_scale.y);
+        _radius = _capsule.radius * Mathf.Max(Mathf.Abs(_scale.x), Mathf.Abs(_scale.z));
+        _halfHeight = Mathf.Max(_halfHeight, _radius);
     }
 
     // 바라보는 방향 표시: 맞으면 빨간색(맞은 지점까지), 안 맞으면 초록색

@@ -2095,6 +2095,7 @@ GameObject:
   - component: {fileID: 1794931738}
   - component: {fileID: 1794931739}
   - component: {fileID: 1794931740}
+  - component: {fileID: 1794931741}
   m_Layer: 0
   m_Name: Player
   m_TagString: Player
@@ -2115,7 +2116,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerController
   _moveAction: {fileID: -1246895598473198080, guid: 052faaac586de48259a63d0c4782560b, type: 3}
+  _jumpAction: {fileID: 335763634227698153, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   _moveSpeed: 3
+  _jumpHeight: 1.1
+  _gravity: 25
+  _airControl: 0.85
+  _groundMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
   _forwardRayDistance: 10
 --- !u!23 &1794931733
 MeshRenderer:
@@ -2289,6 +2297,18 @@ MonoBehaviour:
   _targets:
   - {fileID: 1794931738}
   - {fileID: 1794931731}
+--- !u!75 &1794931741
+ConstantForce:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1794931730}
+  m_Enabled: 1
+  m_Force: {x: 0, y: 0, z: 0}
+  m_RelativeForce: {x: 0, y: 0, z: 0}
+  m_Torque: {x: 0, y: 0, z: 0}
+  m_RelativeTorque: {x: 0, y: 0, z: 0}
 --- !u!1 &2044930837
 GameObject:
   m_ObjectHideFlags: 0
