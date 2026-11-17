@@ -57,6 +57,12 @@ public class PlayerController : MonoBehaviour
         _moveAction.action.Disable();
         if (_look != null) _look.OnLookChanged -= ApplyVelocity;
         _moveInput = Vector2.zero;
+
+        // 조작이 꺼지면(게임 종료 등) 미끄러지지 않도록 수평 속도를 멈춤
+        if (_rb != null)
+        {
+            _rb.linearVelocity = new Vector3(0f, _rb.linearVelocity.y, 0f);
+        }
     }
 
     // 입력이 바뀔 때만 호출됨 (키를 떼면 canceled로 (0, 0)이 들어옴)

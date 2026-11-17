@@ -1,0 +1,52 @@
+using UnityEngine;
+using UnityEngine.SceneManagement;
+using UnityEngine.UI;
+
+/// <summary>
+/// 누르면 씬을 전환하는 버튼. (재시작, 타이틀로, 난이도 선택으로 등)
+/// - 이동할 씬 이름을 비우면 현재 씬을 다시 불러옵니다. (재시작)
+/// - 씬 로더(SceneLoader)를 연결하면 페이드와 함께 전환하고, 비우면 바로 전환합니다.
+/// 이동할 씬은 Build Profiles 씬 목록에 등록되어 있어야 합니다.
+/// </summary>
+[RequireComponent(typeof(Button))]
+public class SceneChangeButton : MonoBehaviour
+{
+    [Tooltip("이동할 씬 이름. 비우면 현재 씬을 다시 불러옴 (재시작)")]
+    [SerializeField] private string _targetSceneName;
+    [Tooltip("ISceneLoader를 구현한 컴포넌트 (SceneLoader). 비우면 페이드 없이 바로 전환")]
+    [SerializeField] private MonoBehaviour _sceneLoaderSource;
+
+    private Button _button;
+    private ISceneLoader _sceneLoader;
+
+    private void Awake()
+    {
+        _button = GetComponent<Button>();
+        _sceneLoader = InterfaceRef.Resolve<ISceneLoader>(_sceneLoaderSource, this, nameof(_sceneLoaderSource));
+    }
+
+    private void OnEnable()
+    {
+        _button.onClick.AddListener(OnClick);
+    }
+
+    private void OnDisable()
+    {
+        _button.onClick.RemoveListener(OnClick);
+    }
+
+    private void OnClick()
+    {
+        bool _isReload = string.IsNullOrEmpty(_targetSceneName);
+
+        if (_sceneLoader != null)
+        {
+            if (_isReload) _sceneLoader.ReloadCurrent();
+            else _sceneLoader.LoadScene(_targetSceneName);
+            return;
+        }
+
+        if (_isReload) SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+        else SceneManager.LoadScene(_targetSceneName);
+    }
+}
