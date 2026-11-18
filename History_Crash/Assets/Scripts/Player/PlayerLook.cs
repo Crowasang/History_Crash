@@ -41,9 +41,14 @@ public class PlayerLook : MonoBehaviour, ILookDirection
     private Rigidbody _rb;
     private float _yaw;
     private float _pitch;
+    private float _homeYaw;
+    private float _homePitch;
 
     /// <summary>좌우 시점 각도 (도). 이동 방향 계산에 사용</summary>
     public float Yaw => _yaw;
+
+    /// <summary>true면 마우스 좌우 회전과 Z/C 스냅을 무시 (락온 중)</summary>
+    public bool IsYawLocked { get; set; }
 
     /// <summary>화면 가운데가 가리키는 지점 (공격 방향 계산에 사용)</summary>
     public Vector3 AimPoint { get; private set; }
@@ -60,6 +65,13 @@ public class PlayerLook : MonoBehaviour, ILookDirection
         {
             _camera = Camera.main;
         }
+    }
+
+    // 시작 방향(FaceTargetOnStart 등)이 정해진 뒤의 시점을 V로 돌아갈 기본 시점으로 기억
+    private void Start()
+    {
+        _homeYaw = _yaw;
+        _homePitch = _pitch;
     }
 
     private void OnEnable()
@@ -110,7 +122,11 @@ public class PlayerLook : MonoBehaviour, ILookDirection
     {
         Vector2 _delta = _context.ReadValue<Vector2>();
 
-        _yaw += _delta.x * _sensitivity;
+        // 락온 중에는 좌우는 락온이 정하고, 위아래만 마우스로 움직임
+        if (!IsYawLocked)
+        {
+            _yaw += _delta.x * _sensitivity;
+        }
         _pitch = Mathf.Clamp(_pitch - _delta.y * _sensitivity, _minPitch, _maxPitch);
 
         _rb.MoveRotation(Quaternion.Euler(0f, _yaw, 0f));
@@ -136,11 +152,27 @@ public class PlayerLook : MonoBehaviour, ILookDirection
     /// </summary>
     public void SnapYaw(int _direction)
     {
-        _yaw = Mathf.Round(_yaw / _snapAngle) * _snapAngle + _direction * _snapAngle;
+        if (IsYawLocked) return;
+
+        SetYaw(Mathf.Round(_yaw / _snapAngle) * _snapAngle + _direction * _snapAngle);
+    }
+
+    /// <summary>좌우 시점 각도를 직접 정합니다. (락온 추적, 스냅)</summary>
+    public void SetYaw(float _newYaw)
+    {
+        _yaw = _newYaw;
 
         _rb.MoveRotation(Quaternion.Euler(0f, _yaw, 0f));
         UpdateAimPoint();
         OnLookChanged?.Invoke();
+    }
+
+    /// <summary>게임 시작 때의 시점으로 돌아갑니다. (V)</summary>
+    public void ResetToHomeView()
+    {
+        _pitch = _homePitch;
+        ApplyPitch();
+        SetYaw(_homeYaw);
     }
 
     /// <summary>지정한 위치를 수평으로 바라보도록 시점을 돌립니다. (위아래 각도는 정면으로 초기화)</summary>
