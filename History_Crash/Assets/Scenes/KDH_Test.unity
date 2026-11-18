@@ -2374,9 +2374,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PlayerAnimationDriver
   _animator: {fileID: 924814555}
   _motionSource: {fileID: 1794931731}
-  _forwardClipSpeed: 2.04
-  _backClipSpeed: 1.69
-  _strafeClipSpeed: 0.47
+  _forwardClipSpeed: 5
+  _backClipSpeed: 4
+  _strafeClipSpeed: 4
   _maxAnimSpeed: 3.5
   _dampTime: 0.08
 --- !u!1 &2044930837
