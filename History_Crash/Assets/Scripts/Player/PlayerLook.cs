@@ -13,6 +13,10 @@ using UnityEngine.InputSystem;
 public class PlayerLook : MonoBehaviour, ILookDirection
 {
     [SerializeField] private InputActionReference _lookAction;
+    [Tooltip("시점 왼쪽 스냅 (Z)")]
+    [SerializeField] private InputActionReference _snapLeftAction;
+    [Tooltip("시점 오른쪽 스냅 (C)")]
+    [SerializeField] private InputActionReference _snapRightAction;
     [Tooltip("Cinemachine 카메라가 따라가는 어깨 높이 기준점 (플레이어 자식)")]
     [SerializeField] private Transform _cameraTarget;
     [Tooltip("조준 계산에 쓸 카메라 (비우면 Main Camera)")]
@@ -23,6 +27,8 @@ public class PlayerLook : MonoBehaviour, ILookDirection
     [SerializeField] private float _sensitivity = 0.1f;
     [SerializeField] private float _minPitch = -30f;
     [SerializeField] private float _maxPitch = 60f;
+    [Tooltip("Z/C 스냅 한 번에 도는 각도 (기획 v20: 45)")]
+    [SerializeField] private float _snapAngle = 45f;
 
     [Header("Aim")]
     [Tooltip("조준 레이 최대 거리. 아무것도 안 맞으면 이 거리의 지점을 조준")]
@@ -61,6 +67,18 @@ public class PlayerLook : MonoBehaviour, ILookDirection
         _lookAction.action.performed += OnLook;
         _lookAction.action.Enable();
 
+        if (_snapLeftAction != null)
+        {
+            _snapLeftAction.action.performed += OnSnapLeft;
+            _snapLeftAction.action.Enable();
+        }
+
+        if (_snapRightAction != null)
+        {
+            _snapRightAction.action.performed += OnSnapRight;
+            _snapRightAction.action.Enable();
+        }
+
         // 게임 중에는 커서를 숨기고 화면에 고정 (에디터에서는 ESC로 해제)
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
@@ -70,6 +88,18 @@ public class PlayerLook : MonoBehaviour, ILookDirection
     {
         _lookAction.action.performed -= OnLook;
         _lookAction.action.Disable();
+
+        if (_snapLeftAction != null)
+        {
+            _snapLeftAction.action.performed -= OnSnapLeft;
+            _snapLeftAction.action.Disable();
+        }
+
+        if (_snapRightAction != null)
+        {
+            _snapRightAction.action.performed -= OnSnapRight;
+            _snapRightAction.action.Disable();
+        }
 
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
@@ -84,13 +114,61 @@ public class PlayerLook : MonoBehaviour, ILookDirection
         _pitch = Mathf.Clamp(_pitch - _delta.y * _sensitivity, _minPitch, _maxPitch);
 
         _rb.MoveRotation(Quaternion.Euler(0f, _yaw, 0f));
+        ApplyPitch();
+
+        UpdateAimPoint();
+        OnLookChanged?.Invoke();
+    }
+
+    // Z / C를 누를 때만 호출됨
+    private void OnSnapLeft(InputAction.CallbackContext _context)
+    {
+        SnapYaw(-1);
+    }
+
+    private void OnSnapRight(InputAction.CallbackContext _context)
+    {
+        SnapYaw(1);
+    }
+
+    /// <summary>
+    /// 좌우 시점을 스냅 각도 단위로 돌립니다. 지금 각도를 가장 가까운 45° 단위에 맞춘 뒤 한 칸 돌림.
+    /// </summary>
+    public void SnapYaw(int _direction)
+    {
+        _yaw = Mathf.Round(_yaw / _snapAngle) * _snapAngle + _direction * _snapAngle;
+
+        _rb.MoveRotation(Quaternion.Euler(0f, _yaw, 0f));
+        UpdateAimPoint();
+        OnLookChanged?.Invoke();
+    }
+
+    /// <summary>지정한 위치를 수평으로 바라보도록 시점을 돌립니다. (위아래 각도는 정면으로 초기화)</summary>
+    public void LookAt(Vector3 _worldPoint)
+    {
+        Vector3 _dir = _worldPoint - transform.position;
+        _dir.y = 0f;
+        if (_dir.sqrMagnitude < 0.0001f) return;
+
+        _yaw = Quaternion.LookRotation(_dir).eulerAngles.y;
+        _pitch = 0f;
+
+        // 즉시 돌림 (시작 시점에는 보간 없이 바로 그 방향이어야 함)
+        Quaternion _rotation = Quaternion.Euler(0f, _yaw, 0f);
+        transform.rotation = _rotation;
+        _rb.rotation = _rotation;
+        ApplyPitch();
+
+        UpdateAimPoint();
+        OnLookChanged?.Invoke();
+    }
+
+    private void ApplyPitch()
+    {
         if (_cameraTarget != null)
         {
             _cameraTarget.localRotation = Quaternion.Euler(_pitch, 0f, 0f);
         }
-
-        UpdateAimPoint();
-        OnLookChanged?.Invoke();
     }
 
     private void UpdateAimPoint()
