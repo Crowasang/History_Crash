@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -7,10 +8,11 @@ using UnityEngine.InputSystem;
 /// 입력이나 시점이 바뀔 때만 Rigidbody 속도를 바꾸고, 이후 이동과 중력은 물리 엔진이 처리합니다.
 /// - 중력: 프로젝트 물리 설정 대신 ConstantForce로 이 플레이어에게만 적용 (기본 25, 기획 v19)
 /// - 점프: 바닥에 있을 때만, 높이 1.1m
+/// - 착지: 매 프레임 확인하지 않고 바닥에 닿는 충돌 이벤트로 감지
 /// 같은 오브젝트에 ILookDirection을 구현한 컴포넌트가 있어야 합니다.
 /// </summary>
 [RequireComponent(typeof(Rigidbody), typeof(CapsuleCollider))]
-public class PlayerController : MonoBehaviour, IJumpState
+public class PlayerController : MonoBehaviour, IJumpState, IPlayerMotion, ISpeedModifier
 {
     /// <summary>이 높이(m) 이상 떠 있으면 점프 회피로 판정 (기획 v19)</summary>
     public const float JUMP_DODGE_HEIGHT = 0.45f;
@@ -20,8 +22,11 @@ public class PlayerController : MonoBehaviour, IJumpState
 
     [SerializeField] private InputActionReference _moveAction;
     [SerializeField] private InputActionReference _jumpAction;
-    [Tooltip("이동 속도 (m/초)")]
-    [SerializeField] private float _moveSpeed = 3f;
+    [SerializeField] private InputActionReference _sprintAction;
+    [Tooltip("이동 속도 (m/초, 기획 v19·v20: 4)")]
+    [SerializeField] private float _moveSpeed = 4f;
+    [Tooltip("달리기(Shift) 속도 배율 (기획 v19: 1.6)")]
+    [SerializeField] private float _runMultiplier = 1.6f;
 
     [Header("Jump")]
     [Tooltip("점프 높이 (m)")]
@@ -40,8 +45,31 @@ public class PlayerController : MonoBehaviour, IJumpState
     private CapsuleCollider _capsule;
     private ILookDirection _look;
     private Vector2 _moveInput;
+    private bool _isAirborne;
+    private bool _isRunning;
+    private float _speedMultiplier = 1f;
 
     public bool IsGrounded => CheckGrounded();
+
+    public float SpeedMultiplier
+    {
+        get => _speedMultiplier;
+        set
+        {
+            _speedMultiplier = Mathf.Max(0f, value);
+            if (_rb == null) return;
+
+            ApplyVelocity();
+            NotifyMoveChanged();
+        }
+    }
+
+    /// <summary>달리기 여부와 속도 배율로 계산한 지상 이동 속도 (m/초)</summary>
+    private float CurrentGroundSpeed => _moveSpeed * (_isRunning ? _runMultiplier : 1f) * _speedMultiplier;
+
+    public event Action<Vector2, float> OnMoveChanged;
+    public event Action OnJumped;
+    public event Action OnLanded;
 
     private void Awake()
     {
@@ -79,6 +107,13 @@ public class PlayerController : MonoBehaviour, IJumpState
             _jumpAction.action.Enable();
         }
 
+        if (_sprintAction != null)
+        {
+            _sprintAction.action.performed += OnSprint;
+            _sprintAction.action.canceled += OnSprint;
+            _sprintAction.action.Enable();
+        }
+
         if (_look != null) _look.OnLookChanged += ApplyVelocity;
     }
 
@@ -94,8 +129,17 @@ public class PlayerController : MonoBehaviour, IJumpState
             _jumpAction.action.Disable();
         }
 
+        if (_sprintAction != null)
+        {
+            _sprintAction.action.performed -= OnSprint;
+            _sprintAction.action.canceled -= OnSprint;
+            _sprintAction.action.Disable();
+        }
+
         if (_look != null) _look.OnLookChanged -= ApplyVelocity;
         _moveInput = Vector2.zero;
+        _isRunning = false;
+        OnMoveChanged?.Invoke(Vector2.zero, 0f);
 
         // 조작이 꺼지면(게임 종료 등) 미끄러지지 않도록 수평 속도를 멈춤
         if (_rb != null)
@@ -109,6 +153,21 @@ public class PlayerController : MonoBehaviour, IJumpState
     {
         _moveInput = _context.ReadValue<Vector2>();
         ApplyVelocity();
+        NotifyMoveChanged();
+    }
+
+    // Shift를 누르거나 뗄 때만 호출됨
+    private void OnSprint(InputAction.CallbackContext _context)
+    {
+        _isRunning = _context.ReadValueAsButton();
+        ApplyVelocity();
+        NotifyMoveChanged();
+    }
+
+    private void NotifyMoveChanged()
+    {
+        // 몸이 항상 보는 방향을 향하므로 입력값이 곧 몸 기준 이동 방향
+        OnMoveChanged?.Invoke(_moveInput, CurrentGroundSpeed * Mathf.Clamp01(_moveInput.magnitude));
     }
 
     // Space를 누를 때만 호출됨
@@ -126,7 +185,31 @@ public class PlayerController : MonoBehaviour, IJumpState
         Vector3 _velocity = _rb.linearVelocity;
         _velocity.y = Mathf.Sqrt(2f * _gravity * _jumpHeight);
         _rb.linearVelocity = _velocity;
+
+        _isAirborne = true;
+        OnJumped?.Invoke();
         return true;
+    }
+
+    // 바닥에 닿는 순간 착지 처리 (매 프레임 확인하지 않음)
+    private void OnCollisionEnter(Collision _collision)
+    {
+        TryLand();
+    }
+
+    // 벽에 먼저 닿은 채로 내려앉는 경우 대비 (공중일 때만 확인)
+    private void OnCollisionStay(Collision _collision)
+    {
+        if (_isAirborne) TryLand();
+    }
+
+    private void TryLand()
+    {
+        if (!_isAirborne || _rb.linearVelocity.y > 0.01f || !CheckGrounded()) return;
+
+        _isAirborne = false;
+        ApplyVelocity(); // 공중 이동 감속 해제
+        OnLanded?.Invoke();
     }
 
     // 입력이나 시점이 바뀔 때 이동 속도를 다시 계산
@@ -137,7 +220,8 @@ public class PlayerController : MonoBehaviour, IJumpState
         Vector3 _moveDir = Quaternion.Euler(0f, _yaw, 0f) * new Vector3(_moveInput.x, 0f, _moveInput.y);
 
         // 공중에서는 이동 효과를 줄임
-        float _speed = CheckGrounded() ? _moveSpeed : _moveSpeed * _airControl;
+        bool _isInAir = _isAirborne || !CheckGrounded();
+        float _speed = _isInAir ? CurrentGroundSpeed * _airControl : CurrentGroundSpeed;
 
         // 낙하 속도(y)는 유지하고 수평 속도만 바꿈
         Vector3 _velocity = _moveDir * _speed;
