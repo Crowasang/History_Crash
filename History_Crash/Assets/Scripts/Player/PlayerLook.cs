@@ -17,16 +17,23 @@ public class PlayerLook : MonoBehaviour, ILookDirection
     [SerializeField] private InputActionReference _snapLeftAction;
     [Tooltip("시점 오른쪽 스냅 (C)")]
     [SerializeField] private InputActionReference _snapRightAction;
+    [Tooltip("커서 풀기 (Esc)")]
+    [SerializeField] private InputActionReference _cursorUnlockAction;
+    [Tooltip("커서 다시 잠그기 (좌클릭)")]
+    [SerializeField] private InputActionReference _cursorLockAction;
     [Tooltip("Cinemachine 카메라가 따라가는 어깨 높이 기준점 (플레이어 자식)")]
     [SerializeField] private Transform _cameraTarget;
     [Tooltip("조준 계산에 쓸 카메라 (비우면 Main Camera)")]
     [SerializeField] private Camera _camera;
 
     [Header("Sensitivity")]
-    [Tooltip("마우스 1픽셀당 회전 각도 (도)")]
-    [SerializeField] private float _sensitivity = 0.1f;
-    [SerializeField] private float _minPitch = -30f;
-    [SerializeField] private float _maxPitch = 60f;
+    [Tooltip("마우스 1픽셀당 회전 각도 (도, 기획 v20: 0.12)")]
+    [SerializeField] private float _sensitivity = 0.12f;
+    [Tooltip("위아래 각도 범위 (도, +가 내려다봄, 기획 v20: -10~70)")]
+    [SerializeField] private float _minPitch = -10f;
+    [SerializeField] private float _maxPitch = 70f;
+    [Tooltip("시작할 때 위아래 각도 (도, 기획 v20: 18)")]
+    [SerializeField] private float _defaultPitch = 18f;
     [Tooltip("Z/C 스냅 한 번에 도는 각도 (기획 v20: 45)")]
     [SerializeField] private float _snapAngle = 45f;
 
@@ -60,6 +67,8 @@ public class PlayerLook : MonoBehaviour, ILookDirection
     {
         _rb = GetComponent<Rigidbody>();
         _yaw = transform.eulerAngles.y;
+        _pitch = Mathf.Clamp(_defaultPitch, _minPitch, _maxPitch);
+        ApplyPitch();
 
         if (_camera == null)
         {
@@ -91,9 +100,20 @@ public class PlayerLook : MonoBehaviour, ILookDirection
             _snapRightAction.action.Enable();
         }
 
-        // 게임 중에는 커서를 숨기고 화면에 고정 (에디터에서는 ESC로 해제)
-        Cursor.lockState = CursorLockMode.Locked;
-        Cursor.visible = false;
+        if (_cursorUnlockAction != null)
+        {
+            _cursorUnlockAction.action.performed += OnCursorUnlock;
+            _cursorUnlockAction.action.Enable();
+        }
+
+        if (_cursorLockAction != null)
+        {
+            _cursorLockAction.action.performed += OnCursorLock;
+            _cursorLockAction.action.Enable();
+        }
+
+        // 게임 중에는 커서를 숨기고 화면에 고정 (Esc로 풀고, 좌클릭으로 다시 잠금)
+        SetCursorLocked(true);
     }
 
     private void OnDisable()
@@ -113,13 +133,45 @@ public class PlayerLook : MonoBehaviour, ILookDirection
             _snapRightAction.action.Disable();
         }
 
-        Cursor.lockState = CursorLockMode.None;
-        Cursor.visible = true;
+        if (_cursorUnlockAction != null)
+        {
+            _cursorUnlockAction.action.performed -= OnCursorUnlock;
+            _cursorUnlockAction.action.Disable();
+        }
+
+        if (_cursorLockAction != null)
+        {
+            _cursorLockAction.action.performed -= OnCursorLock;
+            _cursorLockAction.action.Disable();
+        }
+
+        SetCursorLocked(false);
+    }
+
+    // Esc를 누를 때만 호출됨
+    private void OnCursorUnlock(InputAction.CallbackContext _context)
+    {
+        SetCursorLocked(false);
+    }
+
+    // 좌클릭할 때만 호출됨
+    private void OnCursorLock(InputAction.CallbackContext _context)
+    {
+        SetCursorLocked(true);
+    }
+
+    private static void SetCursorLocked(bool _isLocked)
+    {
+        Cursor.lockState = _isLocked ? CursorLockMode.Locked : CursorLockMode.None;
+        Cursor.visible = !_isLocked;
     }
 
     // 마우스가 움직일 때만 호출됨
     private void OnLook(InputAction.CallbackContext _context)
     {
+        // 커서가 풀려 있으면(Esc) 시점을 돌리지 않음
+        if (Cursor.lockState != CursorLockMode.Locked) return;
+
         Vector2 _delta = _context.ReadValue<Vector2>();
 
         // 락온 중에는 좌우는 락온이 정하고, 위아래만 마우스로 움직임
@@ -175,7 +227,7 @@ public class PlayerLook : MonoBehaviour, ILookDirection
         SetYaw(_homeYaw);
     }
 
-    /// <summary>지정한 위치를 수평으로 바라보도록 시점을 돌립니다. (위아래 각도는 정면으로 초기화)</summary>
+    /// <summary>지정한 위치를 수평으로 바라보도록 시점을 돌립니다. (위아래 각도는 기본 각도로 초기화)</summary>
     public void LookAt(Vector3 _worldPoint)
     {
         Vector3 _dir = _worldPoint - transform.position;
@@ -183,7 +235,7 @@ public class PlayerLook : MonoBehaviour, ILookDirection
         if (_dir.sqrMagnitude < 0.0001f) return;
 
         _yaw = Quaternion.LookRotation(_dir).eulerAngles.y;
-        _pitch = 0f;
+        _pitch = Mathf.Clamp(_defaultPitch, _minPitch, _maxPitch);
 
         // 즉시 돌림 (시작 시점에는 보간 없이 바로 그 방향이어야 함)
         Quaternion _rotation = Quaternion.Euler(0f, _yaw, 0f);
