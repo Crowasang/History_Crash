@@ -7393,7 +7393,7 @@ MonoBehaviour:
   ShoulderOffset: {x: 0.5, y: 0.2, z: 0}
   VerticalArmLength: 0.4
   CameraSide: 1
-  CameraDistance: 3.5
+  CameraDistance: 5
   AvoidObstacles:
     Enabled: 1
     CollisionFilter:
@@ -33669,11 +33669,14 @@ MonoBehaviour:
   _lookAction: {fileID: 6940538419726410420, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   _snapLeftAction: {fileID: 8314494281462653499, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   _snapRightAction: {fileID: -2012884766186116951, guid: 052faaac586de48259a63d0c4782560b, type: 3}
+  _cursorUnlockAction: {fileID: -2654847509051640293, guid: 052faaac586de48259a63d0c4782560b, type: 3}
+  _cursorLockAction: {fileID: 9072007003925121298, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   _cameraTarget: {fileID: 279381771}
   _camera: {fileID: 774609865}
-  _sensitivity: 0.1
-  _minPitch: -30
-  _maxPitch: 60
+  _sensitivity: 0.12
+  _minPitch: -10
+  _maxPitch: 70
+  _defaultPitch: 18
   _snapAngle: 45
   _aimDistance: 100
 --- !u!114 &1794931739
