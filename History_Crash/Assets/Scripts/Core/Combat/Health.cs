@@ -11,7 +11,7 @@ using UnityEngine;
 /// _health.CurrentHp.Subscribe(_hp => UpdateHeartUI(_hp)).AddTo(this);
 /// _health.OnDeath.Subscribe(_ => PlayDeathEffect()).AddTo(this);
 /// </example>
-public class Health : MonoBehaviour, IDamageable, IHealthReadOnly, IPoolable
+public class Health : MonoBehaviour, IDamageable, IHealthReadOnly, IInvincible, IPoolable
 {
     [SerializeField] private int _maxHp = 100;
 
