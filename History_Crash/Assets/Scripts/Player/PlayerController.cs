@@ -12,7 +12,7 @@ using UnityEngine.InputSystem;
 /// 같은 오브젝트에 ILookDirection을 구현한 컴포넌트가 있어야 합니다.
 /// </summary>
 [RequireComponent(typeof(Rigidbody), typeof(CapsuleCollider))]
-public class PlayerController : MonoBehaviour, IJumpState, IPlayerMotion, ISpeedModifier, IPlayerTeleport
+public class PlayerController : MonoBehaviour, IJumpState, IPlayerMotion, ISpeedModifier, IPlayerTeleport, IMovementLock
 {
     /// <summary>이 높이(m) 이상 떠 있으면 점프 회피로 판정 (기획 v19)</summary>
     public const float JUMP_DODGE_HEIGHT = 0.45f;
@@ -48,8 +48,27 @@ public class PlayerController : MonoBehaviour, IJumpState, IPlayerMotion, ISpeed
     private bool _isAirborne;
     private bool _isRunning;
     private float _speedMultiplier = 1f;
+    private int _lockCount;
 
     public bool IsGrounded => CheckGrounded();
+
+    /// <summary>조작이 잠겨 있는지 (강제 이동 등)</summary>
+    public bool IsLocked => _lockCount > 0;
+
+    /// <summary>이동·점프 입력을 막습니다. 반드시 같은 횟수만큼 Unlock()을 불러야 합니다.</summary>
+    public void Lock()
+    {
+        _lockCount++;
+    }
+
+    /// <summary>잠금을 하나 풉니다. 모두 풀리면 누르고 있던 이동 입력이 바로 다시 적용됩니다.</summary>
+    public void Unlock()
+    {
+        if (_lockCount == 0) return;
+
+        _lockCount--;
+        if (_lockCount == 0) ApplyVelocity();
+    }
 
     public float SpeedMultiplier
     {
@@ -179,7 +198,7 @@ public class PlayerController : MonoBehaviour, IJumpState, IPlayerMotion, ISpeed
     /// <summary>바닥에 있으면 점프합니다. (입력 외에 기믹·연출에서도 호출 가능)</summary>
     public bool Jump()
     {
-        if (!CheckGrounded()) return false;
+        if (IsLocked || !CheckGrounded()) return false;
 
         // 원하는 높이 h에 도달하는 초기 속도 = √(2·g·h)
         Vector3 _velocity = _rb.linearVelocity;
@@ -215,6 +234,9 @@ public class PlayerController : MonoBehaviour, IJumpState, IPlayerMotion, ISpeed
     // 입력이나 시점이 바뀔 때 이동 속도를 다시 계산
     private void ApplyVelocity()
     {
+        // 잠겨 있으면(강제 이동 중) 속도를 건드리지 않음
+        if (IsLocked) return;
+
         // 시점의 좌우 각도 기준으로 입력을 돌림 (W = 보고 있는 방향)
         float _yaw = _look != null ? _look.Yaw : transform.eulerAngles.y;
         Vector3 _moveDir = Quaternion.Euler(0f, _yaw, 0f) * new Vector3(_moveInput.x, 0f, _moveInput.y);
