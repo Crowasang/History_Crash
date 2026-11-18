@@ -12,7 +12,7 @@ using UnityEngine.InputSystem;
 /// 같은 오브젝트에 ILookDirection을 구현한 컴포넌트가 있어야 합니다.
 /// </summary>
 [RequireComponent(typeof(Rigidbody), typeof(CapsuleCollider))]
-public class PlayerController : MonoBehaviour, IJumpState, IPlayerMotion, ISpeedModifier
+public class PlayerController : MonoBehaviour, IJumpState, IPlayerMotion, ISpeedModifier, IPlayerTeleport
 {
     /// <summary>이 높이(m) 이상 떠 있으면 점프 회피로 판정 (기획 v19)</summary>
     public const float JUMP_DODGE_HEIGHT = 0.45f;
@@ -239,6 +239,32 @@ public class PlayerController : MonoBehaviour, IJumpState, IPlayerMotion, ISpeed
             _constantForce = gameObject.AddComponent<ConstantForce>();
         }
         _constantForce.force = Vector3.down * _gravity * _rb.mass;
+    }
+
+    public float PivotHeightAboveFeet
+    {
+        get
+        {
+            GetCapsuleWorld(out Vector3 _center, out float _halfHeight, out float _);
+            return transform.position.y - (_center.y - _halfHeight);
+        }
+    }
+
+    /// <summary>
+    /// 지정한 위치로 즉시 옮기고 바닥에 선 상태로 만듭니다. (낙하 복귀, 아누비스 강제 이동 도착)
+    /// 떨어지던 속도와 점프 상태는 끊고, 누르고 있던 이동 입력은 그대로 이어집니다.
+    /// </summary>
+    public void TeleportTo(Vector3 _position)
+    {
+        _rb.position = _position;
+        transform.position = _position;
+        _rb.linearVelocity = Vector3.zero;
+
+        bool _wasAirborne = _isAirborne;
+        _isAirborne = false;
+        ApplyVelocity();
+
+        if (_wasAirborne) OnLanded?.Invoke();
     }
 
     public float GetHeightAboveGround()
