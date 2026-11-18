@@ -24,6 +24,33 @@
                     "initialStateCheck": true
                 },
                 {
+                    "name": "Zoom",
+                    "type": "Value",
+                    "id": "c45ff28f-c78c-4307-99ee-f60969db7024",
+                    "expectedControlType": "Axis",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "CameraSnapLeft",
+                    "type": "Button",
+                    "id": "7838ec60-1b87-4b8c-bd22-3e485fc35a13",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "CameraSnapRight",
+                    "type": "Button",
+                    "id": "42f3546e-d640-428d-8f36-14720dbbe50e",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
                     "name": "Attack",
                     "type": "Button",
                     "id": "6c2ab1b8-8984-453a-af3d-a3c78ae1679a",
@@ -228,6 +255,39 @@
                     "processors": "",
                     "groups": ";Gamepad",
                     "action": "Look",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "d08a3f68-632c-43a8-bb9d-e310aafa4d3b",
+                    "path": "<Mouse>/scroll/y",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": ";Keyboard&Mouse",
+                    "action": "Zoom",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "0db6082b-fe6f-4b33-ba12-a2123709d871",
+                    "path": "<Keyboard>/z",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": ";Keyboard&Mouse",
+                    "action": "CameraSnapLeft",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "2bca0b90-7ed8-4adf-87a5-0055c6aae18a",
+                    "path": "<Keyboard>/c",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": ";Keyboard&Mouse",
+                    "action": "CameraSnapRight",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },

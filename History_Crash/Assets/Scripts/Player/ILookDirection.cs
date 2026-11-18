@@ -15,4 +15,7 @@ public interface ILookDirection
 
     /// <summary>시점이 바뀔 때마다 발생</summary>
     event Action OnLookChanged;
+
+    /// <summary>지정한 위치를 바라보도록 시점을 돌립니다. (시작 방향 지정, 연출 등)</summary>
+    void LookAt(Vector3 _worldPoint);
 }
