@@ -20,10 +20,10 @@ public class PlayerAnimationDriver : MonoBehaviour
     [Tooltip("IPlayerMotion을 구현한 컴포넌트 (PlayerController). 비우면 같은 오브젝트에서 찾음")]
     [SerializeField] private MonoBehaviour _motionSource;
 
-    [Header("클립 1배속일 때의 보폭 속도 (m/초)")]
-    [SerializeField] private float _forwardClipSpeed = 2.04f;
-    [SerializeField] private float _backClipSpeed = 1.69f;
-    [SerializeField] private float _strafeClipSpeed = 0.47f;
+    [Header("클립 1배속일 때의 보폭 속도 (m/초, TEST_JMC에서 조정한 값)")]
+    [SerializeField] private float _forwardClipSpeed = 5f;
+    [SerializeField] private float _backClipSpeed = 4f;
+    [SerializeField] private float _strafeClipSpeed = 4f;
     [Tooltip("재생 배속 상한 (너무 빠른 다리 움직임 방지)")]
     [SerializeField] private float _maxAnimSpeed = 3.5f;
     [Tooltip("방향 값이 바뀌는 시간 (초)")]
