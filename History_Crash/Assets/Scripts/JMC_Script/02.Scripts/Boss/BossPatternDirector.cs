@@ -848,13 +848,14 @@ namespace HistoryCrash.Boss
         private void OnGUI()
         {
             string _pat = _current >= 0 ? ((BossPattern)_current) + "  " + _castTime.ToString("F2") + "s" : "-";
-            GUI.Box(new Rect(10, 10, 360, 150), "");
-            GUI.Label(new Rect(20, 16, 340, 20), "Pattern: " + _pat + "   Auto: " + (_autoLoop ? "ON" : "OFF"));
-            GUI.Label(new Rect(20, 36, 340, 20), "Hits: " + HitCount + (_lastHit != "" ? "   (last: " + _lastHit + ")" : ""));
-            GUI.Label(new Rect(20, 60, 340, 20), "Mouse look / WASD move / Shift run / Space jump");
-            GUI.Label(new Rect(20, 78, 340, 20), "Wheel zoom / Q,E 45deg snap / R face boss");
-            GUI.Label(new Rect(20, 96, 340, 20), "Tab lock-on / V overview / Esc free cursor, click lock");
-            GUI.Label(new Rect(20, 114, 340, 20), "1-5 cast A-E / P auto loop on-off");
+            float _top = HistoryCrash.UI.DebugHudLayout.Top;   // 좌측 상단 HP 나침반 아래부터
+            GUI.Box(new Rect(10, _top + 10, 360, 150), "");
+            GUI.Label(new Rect(20, _top + 16, 340, 20), "Pattern: " + _pat + "   Auto: " + (_autoLoop ? "ON" : "OFF"));
+            GUI.Label(new Rect(20, _top + 36, 340, 20), "Hits: " + HitCount + (_lastHit != "" ? "   (last: " + _lastHit + ")" : ""));
+            GUI.Label(new Rect(20, _top + 60, 340, 20), "Mouse look / WASD move / Shift run / Space jump");
+            GUI.Label(new Rect(20, _top + 78, 340, 20), "Wheel zoom / Q,E 45deg snap / R face boss");
+            GUI.Label(new Rect(20, _top + 96, 340, 20), "Tab lock-on / V overview / Esc free cursor, click lock");
+            GUI.Label(new Rect(20, _top + 114, 340, 20), "1-5 cast A-E / P auto loop on-off");
         }
     }
 }

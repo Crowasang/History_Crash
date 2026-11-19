@@ -378,6 +378,15 @@ namespace HistoryCrash.Combat
         private SkillMagicCircle MagicCircle(Transform _parent, float _radius, Color _c)
         {
             SkillMagicCircle _cir = new SkillMagicCircle { Color = _c };
+            // 텍스처 마법진(케프리와 태양 원반 · 네 속성 패): 바깥 고리 = 타격 범위가 되도록 지름을 맞춤
+            var _tex = MagicCircleDecal.Load(MagicCircleDecal.PLAYER_D);
+            if (_tex)
+            {
+                _cir.Decal = new MagicCircleDecal("MagicCircle", _tex, _parent, _radius * 2f / MagicCircleDecal.OUTER_RATIO);
+                _cir.Root = _cir.Decal.Root;
+                _cir.Set(0f, 0f, 0f);
+                return _cir;
+            }
             _cir.Root = new GameObject("MagicCircle").transform;
             _cir.Root.SetParent(_parent, false); _cir.Root.localPosition = Vector3.up * 0.03f;
             _cir.Spin = new GameObject("Spin").transform; _cir.Spin.SetParent(_cir.Root, false);
