@@ -115,7 +115,9 @@ namespace HistoryCrash.Boss
 
             var _rng = new System.Random(1137);
             _crackTex = BuildCrack(256, _rng);
-            _sealTex = BuildSeal(512, _rng);
+            // 파라오 D 마법진 텍스처(카르투슈 · 우라에우스 · 태양 광선과 앙크 · 호루스 매)가 있으면 그것을, 없으면 기존 태양 원반 문양
+            var _pharaoh = MagicCircleDecal.Load(MagicCircleDecal.PHARAOH_D);
+            _sealTex = _pharaoh ? _pharaoh : BuildSeal(512, _rng);
             _shadowTex = BuildSoftDisc(128, 2.2f);
             _heatTex = BuildSoftDisc(128, 3.0f);
         }

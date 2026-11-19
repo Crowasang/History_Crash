@@ -27,8 +27,21 @@ namespace HistoryCrash.Enemy
                 _ball.Rotate(Vector3.up, _spinSpeed * Time.deltaTime, Space.World);
                 float _left = _lifetime - _age;
                 if (_left < 1f) _ball.localScale = _baseScale * Mathf.Max(0f, _left);
+                FaceCamera(_ball);
             }
             if (_age >= _lifetime) Destroy(gameObject);
+        }
+
+        /// <summary>에너지 코어의 빛 판(Bb_ 이름)이 항상 화면을 보게 한다(바닥 오브·스태프 소켓 오브 공용)</summary>
+        public static void FaceCamera(Transform _ball)
+        {
+            var _cam = Camera.main;
+            if (!_cam || !_ball) return;
+            for (int _i = 0; _i < _ball.childCount; _i++)
+            {
+                var _c = _ball.GetChild(_i);
+                if (_c.name.StartsWith(ElementOrb.BILLBOARD_PREFIX)) _c.rotation = Quaternion.LookRotation(_c.position - _cam.transform.position, _cam.transform.up);
+            }
         }
     }
 }

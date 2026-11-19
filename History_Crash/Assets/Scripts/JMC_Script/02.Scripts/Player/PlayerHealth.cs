@@ -19,6 +19,7 @@ namespace HistoryCrash.Player
         [SerializeField, FormerlySerializedAs("invulnerableTime")] private float _invulnerableTime = 1.0f;
         [SerializeField, FormerlySerializedAs("refillDelay"), Tooltip("체력이 0이 되면 이 시간 뒤 다시 가득 채움(시뮬레이션용)")] private float _refillDelay = 2f;
         [SerializeField, FormerlySerializedAs("flashRenderer")] private Renderer _flashRenderer;
+        [SerializeField, Tooltip("왼쪽 위 HP 디버그 글자 표시(HP는 나침반 UI가 보여 주므로 기본 끔)")] private bool _debugLabel = false;
 
         public int HP { get; private set; }
         public string LastDamage { get; private set; } = "";
@@ -70,10 +71,11 @@ namespace HistoryCrash.Player
 
         private void OnGUI()
         {
-            GUI.Box(new Rect(10, 168, 360, 26), "");
+            if (!_debugLabel) return;
+            GUI.Box(new Rect(10, HistoryCrash.UI.DebugHudLayout.Top + 168, 360, 26), "");
             string _hearts = "";
             for (int _i = 0; _i < _maxHP; _i++) _hearts += _i < HP ? "O " : "- ";
-            GUI.Label(new Rect(20, 172, 340, 20), "HP " + HP + "/" + _maxHP + "  " + _hearts + (HP == 0 ? " DOWN" : "") + (LastDamage != "" ? "  (" + LastDamage + ")" : ""));
+            GUI.Label(new Rect(20, HistoryCrash.UI.DebugHudLayout.Top + 172, 340, 20), "HP " + HP + "/" + _maxHP + "  " + _hearts + (HP == 0 ? " DOWN" : "") + (LastDamage != "" ? "  (" + LastDamage + ")" : ""));
         }
     }
 }
