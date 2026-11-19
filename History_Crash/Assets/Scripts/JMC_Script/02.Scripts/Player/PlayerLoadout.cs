@@ -111,10 +111,8 @@ namespace HistoryCrash.Player
             ClearSocketOrb(false);
             var _staff = StaffTransform();
             if (!_staff) return;
-            var _prefab = Resources.Load<GameObject>("Orbs/Orb_" + ElementInfo.Name(_e));
-            GameObject _go;
-            if (_prefab) _go = Instantiate(_prefab);
-            else { _go = GameObject.CreatePrimitive(PrimitiveType.Sphere); Destroy(_go.GetComponent<Collider>()); _go.GetComponent<Renderer>().sharedMaterial = ElementFx.OrbMat(_e); }
+            // 바닥 오브와 같은 에너지 코어(빛으로만 된 오브). Resources 프리팹은 쓰지 않음
+            GameObject _go = ElementOrb.MakeEnergyCore(_e);
             _go.name = "SocketOrb_" + ElementInfo.Name(_e);
             _socketOrb = _go.transform;
             _socketOrb.SetParent(_staff, false);
@@ -148,7 +146,9 @@ namespace HistoryCrash.Player
 
         private void LateUpdate()
         {
-            if (_socketOrb) _socketOrb.Rotate(Vector3.up, _socketSpin * Time.deltaTime, Space.Self);
+            if (!_socketOrb) return;
+            _socketOrb.Rotate(Vector3.up, _socketSpin * Time.deltaTime, Space.Self);
+            OrbMotion.FaceCamera(_socketOrb);   // 에너지 코어 빛 판이 화면을 보게
         }
         public void TryAttack() { if (CanAttack) Attack(); }
 
@@ -271,7 +271,7 @@ namespace HistoryCrash.Player
             }
             string _staff = HeldStaff >= 0 ? _staffNames[HeldStaff] : "-";
             string _orb = HasOrb ? ElementInfo.NameKo(HeldOrb) : "-";
-            GUI.Label(new Rect(20, 84, 360, 20), "Staff: " + _staff + "   Orb: " + _orb + (CanAttack ? "   [좌클릭] 공격" : ""));
+            GUI.Label(new Rect(20, HistoryCrash.UI.DebugHudLayout.Top + 84, 360, 20), "Staff: " + _staff + "   Orb: " + _orb + (CanAttack ? "   [좌클릭] 공격" : ""));
         }
     }
 }

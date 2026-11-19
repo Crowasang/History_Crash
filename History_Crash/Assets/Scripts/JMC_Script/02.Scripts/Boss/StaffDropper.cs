@@ -51,6 +51,22 @@ namespace HistoryCrash.Boss
         [SerializeField, FormerlySerializedAs("iconBobSpeed")] private float _iconBobSpeed = 2.2f;
         [SerializeField, FormerlySerializedAs("iconSpin")] private float _iconSpin = 70f;
 
+        [Header("위치 표시: 스포트라이트 + 블룸(박힌 스태프를 짚어 줌)")]
+        [SerializeField, Tooltip("스포트라이트 색")] private Color _spotColor = new Color(1f, 0.9f, 0.7f, 1f);
+        [SerializeField, Tooltip("스태프 위 조명 높이(m)")] private float _spotHeight = 2.8f;
+        [SerializeField, Tooltip("조명 세기")] private float _spotIntensity = 2.5f;
+        [SerializeField, Tooltip("비추는 원뿔 각도(°). 바닥 원 지름 ≈ 2 × 높이 × tan(각도/2)")] private float _spotAngle = 16f;
+        [SerializeField, Tooltip("가장자리 부드러움(내부 각도 비율 0~1). 낮을수록 가운데만 쨍하고 바깥으로 갈수록 어두워짐")] private float _spotInnerRatio = 0.8f;
+        [SerializeField, Tooltip("스태프 중심 점광원 세기(스태프가 가장 밝게)")] private float _spotCoreIntensity = 0.4f;
+        [SerializeField, Tooltip("스태프 중심 점광원 범위(m)")] private float _spotCoreRange = 1f;
+        [SerializeField, Tooltip("블룸 빛무리 높이(m, 스태프 중심)")] private float _spotGlowHeight = 0.5f;
+        [SerializeField, Tooltip("둥근 빛무리 지름(m)")] private float _spotGlowSize = 0.9f;
+        [SerializeField, Range(0f, 1f), Tooltip("둥근 빛무리 진하기")] private float _spotGlowAlpha = 0.12f;
+        [SerializeField, Tooltip("옆으로 퍼지는 빛 줄기 폭·두께(m)")] private Vector2 _spotStreakSize = new Vector2(1.4f, 0.08f);
+        [SerializeField, Range(0f, 1f), Tooltip("옆으로 퍼지는 빛 줄기 진하기")] private float _spotStreakAlpha = 0f;
+        [SerializeField, FormerlySerializedAs("_pillarAppearTime"), Tooltip("박힌 뒤 빛이 켜지는 시간(초)")] private float _spotAppearTime = 0.4f;
+        [SerializeField, FormerlySerializedAs("_pillarPulseSpeed"), Tooltip("맥박 속도(회/초)")] private float _spotPulseSpeed = 0.8f;
+
         [Header("유지·획득")]
         [SerializeField, FormerlySerializedAs("despawnTime"), Tooltip("박힌 뒤 사라지기까지(초)")] private float _despawnTime = 10f;
         [SerializeField, FormerlySerializedAs("fadeOutTime"), Tooltip("사라질 때 흐려지는 시간(초)")] private float _fadeOutTime = 1f;
@@ -61,6 +77,11 @@ namespace HistoryCrash.Boss
         private static readonly Vector3[] _iconEuler = { new Vector3(0, 0, 90), new Vector3(90, 0, 0), new Vector3(90, 0, 0), new Vector3(90, 0, 0), Vector3.zero };
         private readonly List<StaffDropEntry> _drops = new List<StaffDropEntry>();
         private Material _fadedMat;
+
+        private const string SPOT_NAME = "Spotlight";
+        private static Material _glowMat;
+        private static readonly int _baseColorId = Shader.PropertyToID("_BaseColor");
+        private MaterialPropertyBlock _glowBlock;
 
         public int Count { get { return _drops.Count; } }
 
@@ -88,6 +109,7 @@ namespace HistoryCrash.Boss
             _staff.transform.localRotation = Quaternion.Euler(0, Random.Range(0f, 360f), 0);
 
             Transform _icon = MakeIcon(_iconSource, _root.transform, _pattern);
+            MakeSpot(_root.transform).gameObject.SetActive(false);   // 위치 표시: 박힌 뒤 켠다
             var _item = _root.AddComponent<PickupItem>();
             _item.Kind = PickupKind.Staff; _item.Value = _pattern; _item.Cell = _cell; _item.Ready = false;
             StaffDropEntry _d = new StaffDropEntry { Root = _root, Pattern = _pattern, Cell = _cell, Mat = _mat, IconRenderers = _icon ? _icon.GetComponentsInChildren<Renderer>() : new Renderer[0] };
@@ -147,6 +169,7 @@ namespace HistoryCrash.Boss
             _root.position = _rest;
             _d.Landed = true; _d.LandTime = Time.time;
             var _pick = _root.GetComponent<PickupItem>(); if (_pick) _pick.Ready = true;
+            var _spot = _root.Find(SPOT_NAME); if (_spot) _spot.gameObject.SetActive(true);
             Vector3 _axis = Quaternion.Euler(0, Random.Range(0f, 360f), 0) * Vector3.right;
             for (float _t = 0; _t < _wobbleTime && _root; _t += Time.deltaTime)
             {
@@ -182,6 +205,7 @@ namespace HistoryCrash.Boss
                 if (!_d.Landed) continue;
                 float _left = _despawnTime - (Time.time - _d.LandTime);
                 if (_left <= 0f) { Remove(_i); continue; }
+                UpdateSpot(_d, _left);
                 if (_left < _fadeOutTime)
                 {
                     float _k = _left / _fadeOutTime;
@@ -199,6 +223,117 @@ namespace HistoryCrash.Boss
             if (_d.Root) Destroy(_d.Root);
             if (_d.Mat) Destroy(_d.Mat);
             _drops.RemoveAt(_i);
+        }
+
+        // ---------- 위치 표시 스포트라이트: 좁은 원뿔로 스태프를 짚고, 스태프 중심이 가장 밝으며 옆으로 블룸처럼 번진다 ----------
+        private Transform MakeSpot(Transform _parent)
+        {
+            var _root = new GameObject(SPOT_NAME).transform;
+            _root.SetParent(_parent, false);
+
+            var _beam = new GameObject("Beam");
+            _beam.transform.SetParent(_root, false);
+            _beam.transform.localPosition = Vector3.up * _spotHeight;
+            _beam.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);   // 아래를 향함
+            var _l = _beam.AddComponent<Light>();
+            _l.type = LightType.Spot;
+            _l.color = _spotColor;
+            _l.intensity = 0f;   // 박힌 뒤 UpdateSpot에서 서서히 켬
+            _l.range = _spotHeight + 1.5f;
+            _l.spotAngle = _spotAngle;
+            _l.innerSpotAngle = _spotAngle * Mathf.Clamp01(_spotInnerRatio);
+            _l.shadows = LightShadows.None;
+
+            var _core = new GameObject("Core");
+            _core.transform.SetParent(_root, false);
+            _core.transform.localPosition = Vector3.up * _spotGlowHeight;
+            var _cl = _core.AddComponent<Light>();
+            _cl.type = LightType.Point;
+            _cl.color = _spotColor;
+            _cl.intensity = 0f;
+            _cl.range = _spotCoreRange;
+            _cl.shadows = LightShadows.None;
+
+            MakeGlowQuad(_root, "Glow", new Vector2(_spotGlowSize, _spotGlowSize));
+            MakeGlowQuad(_root, "Streak", _spotStreakSize);
+            return _root;
+        }
+
+        private void MakeGlowQuad(Transform _parent, string _name, Vector2 _size)
+        {
+            var _go = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            _go.name = _name;
+            Destroy(_go.GetComponent<Collider>());
+            _go.transform.SetParent(_parent, false);
+            _go.transform.localPosition = Vector3.up * _spotGlowHeight;
+            _go.transform.localScale = new Vector3(_size.x, _size.y, 1f);
+            var _r = _go.GetComponent<MeshRenderer>();
+            _r.sharedMaterial = GlowMaterial();
+            _r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            _r.receiveShadows = false;
+            _r.enabled = false;
+        }
+
+        private void UpdateSpot(StaffDropEntry _d, float _left)
+        {
+            var _spot = _d.Root.transform.Find(SPOT_NAME);
+            if (!_spot || !_spot.gameObject.activeSelf) return;
+            float _appear = Mathf.Clamp01((Time.time - _d.LandTime) / Mathf.Max(_spotAppearTime, 0.01f));
+            float _fade = _left < _fadeOutTime ? _left / _fadeOutTime : 1f;
+            float _pulse = 0.9f + 0.1f * Mathf.Sin((Time.time - _d.LandTime) * _spotPulseSpeed * Mathf.PI * 2f);
+            float _k = _appear * _fade * _pulse;
+
+            var _beam = _spot.Find("Beam");
+            if (_beam)
+            {
+                _beam.GetComponent<Light>().intensity = _spotIntensity * _k;
+                _beam.rotation = Quaternion.Euler(90f, 0f, 0f);   // 박힐 때 흔들려도 항상 수직으로
+                _beam.position = _spot.position + Vector3.up * _spotHeight;
+            }
+            var _core = _spot.Find("Core");
+            if (_core) _core.GetComponent<Light>().intensity = _spotCoreIntensity * _k;
+
+            var _cam = Camera.main;
+            if (_glowBlock == null) _glowBlock = new MaterialPropertyBlock();
+            for (int _i = 0; _i < _spot.childCount; _i++)
+            {
+                var _q = _spot.GetChild(_i);
+                if (_q.name != "Glow" && _q.name != "Streak") continue;
+                if (_cam) _q.rotation = Quaternion.LookRotation(_q.position - _cam.transform.position, _cam.transform.up);   // 항상 화면을 보고, 줄기는 화면 가로로
+                var _r = _q.GetComponent<Renderer>();
+                var _c = _spotColor; _c.a = (_q.name == "Glow" ? _spotGlowAlpha : _spotStreakAlpha) * _k;
+                _r.enabled = _c.a > 0.003f;
+                _glowBlock.SetColor(_baseColorId, _c);
+                _r.SetPropertyBlock(_glowBlock);
+            }
+        }
+
+        private static Material GlowMaterial()
+        {
+            if (_glowMat) return _glowMat;
+            // 가운데가 가장 진하고 바깥으로 빠르게 옅어지는 둥근 그라데이션(블룸 느낌)
+            const int SIZE = 64;
+            var _tex = new Texture2D(SIZE, SIZE, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, name = "Staff_Spot_Glow" };
+            for (int _y = 0; _y < SIZE; _y++)
+                for (int _x = 0; _x < SIZE; _x++)
+                {
+                    float _dx = (_x + 0.5f) / SIZE * 2f - 1f, _dy = (_y + 0.5f) / SIZE * 2f - 1f;
+                    float _t = Mathf.Clamp01(1f - Mathf.Sqrt(_dx * _dx + _dy * _dy));
+                    _tex.SetPixel(_x, _y, new Color(1f, 1f, 1f, _t * _t * _t));
+                }
+            _tex.Apply();
+            _glowMat = new Material(Shader.Find("Universal Render Pipeline/Particles/Unlit")) { name = "Staff_Drop_SpotGlow" };
+            _glowMat.SetTexture("_BaseMap", _tex);
+            _glowMat.SetColor(_baseColorId, Color.white);
+            _glowMat.SetFloat("_Surface", 1f);
+            _glowMat.SetFloat("_Blend", 2f);
+            _glowMat.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            _glowMat.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.One);   // 가산
+            _glowMat.SetFloat("_ZWrite", 0f);
+            _glowMat.SetFloat("_Cull", 0f);   // 양면
+            _glowMat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            _glowMat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+            return _glowMat;
         }
 
         private Transform MakeIcon(Transform _src, Transform _parent, int _pattern)

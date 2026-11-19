@@ -32,8 +32,20 @@ namespace HistoryCrash.Combat
 
         private Color _color;
         public Color Color { get => _color; set => _color = value; }
+        // 텍스처 마법진(있으면 선 마법진 대신 사용)
+        private MagicCircleDecal _decal;
+        public MagicCircleDecal Decal { get => _decal; set => _decal = value; }
+
         public void Set(float _draw, float _bright, float _time, float _scale = 1f)
         {
+            if (_decal != null)
+            {
+                // 그려지는 정도만큼 커지며 드러나고, 1을 넘는 밝기(착탄 번쩍임)는 발광 세기로 올림
+                float _e = Mathf.SmoothStep(0f, 1f, _draw);
+                var _k = _color * Mathf.Max(1f, _bright);
+                _decal.Set(_k, _bright * _e, _time * 45f, _scale * Mathf.Lerp(0.6f, 1f, _e));
+                return;
+            }
             int _n = Mathf.Max(2, Mathf.CeilToInt(_draw * (_outerPts.Length - 1)) + 1);
             _outer.positionCount = _n;
             for (int _i = 0; _i < _n; _i++) _outer.SetPosition(_i, _outerPts[_i]);
