@@ -496,8 +496,8 @@ namespace HistoryCrash.Stage
 
         private void OnGUI()
         {
-            GUI.Box(new Rect(10, 198, 360, 26), "");
-            GUI.Label(new Rect(20, 202, 340, 20), Status);
+            GUI.Box(new Rect(10, HistoryCrash.UI.DebugHudLayout.Top + 198, 360, 26), "");
+            GUI.Label(new Rect(20, HistoryCrash.UI.DebugHudLayout.Top + 202, 340, 20), Status);
         }
 
         /// <summary>테스트용: 다음 붕괴까지 남은 대기 시간을 바로 끝낸다.</summary>

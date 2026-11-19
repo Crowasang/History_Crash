@@ -48,6 +48,7 @@ namespace HistoryCrash.Stage
         [Header("마법진")]
         [SerializeField, FormerlySerializedAs("circleRadius")] private float _circleRadius = 0.6f;
         [SerializeField, FormerlySerializedAs("circleWidth")] private float _circleWidth = 0.035f;
+        [SerializeField, Tooltip("텍스처 마법진(아누비스의 자기 선언) 지름(m). 텍스처가 없으면 위의 선 마법진을 씀")] private float _decalDiameter = 2.4f;
 
         public string Status { get; private set; } = "";
 
@@ -144,7 +145,9 @@ namespace HistoryCrash.Stage
             _pl.transform.SetParent(_fx, false); _pl.transform.position = _top + Vector3.up * 0.6f;
             _pl.type = LightType.Point; _pl.color = _glowColor / Mathf.Max(_glowColor.maxColorComponent, 1e-3f); _pl.range = _pillarLightRange; _pl.intensity = 0; _pl.shadows = LightShadows.None;
             var _prs = _pillar.GetComponentsInChildren<Renderer>();
-            var _circle = MagicCircle(_fx, _destPos + Vector3.up * 0.02f);
+            var _decal = MakeDecal(_fx, _destPos + Vector3.up * 0.02f);
+            var _circle = _decal != null ? new List<LineRenderer>() : MagicCircle(_fx, _destPos + Vector3.up * 0.02f);
+            _decalAngle = Random.Range(0f, 360f);
 
             for (float _t = 0; _t < _warnTime; _t += Time.deltaTime)
             {
@@ -154,15 +157,16 @@ namespace HistoryCrash.Stage
                 _pl.intensity = _pillarLightIntensity * _k * (0.85f + 0.15f * Mathf.Sin(Time.time * 13f));
                 SetPillarGlow(_prs, 1f + (_pillarEmissionBoost - 1f) * _k);
                 UpdateCircle(_circle, _u, Time.time);
+                UpdateDecal(_decal, _u, Time.time);
                 // 예고 도중 호루스가 도착 칸(주변 포함)을 붕괴 대상으로 고르면 마법진을 안전한 칸으로 옮김
-                if (!IsGoodDest(_dest)) { _dest = PickDest(_pillarCell); _destPos = _grid.CellCenter(_dest, _grid.FloorTopY); MoveCircle(_circle, _destPos + Vector3.up * 0.02f); }
+                if (!IsGoodDest(_dest)) { _dest = PickDest(_pillarCell); _destPos = _grid.CellCenter(_dest, _grid.FloorTopY); MoveCircle(_circle, _decal, _destPos + Vector3.up * 0.02f); }
                 Status = "Anubis: pull in " + (_warnTime - _t).ToString("F1") + "s";
                 yield return null;
             }
 
             // 3) 강제 이동(이동 중 무적 + 도착 후 0.5초 무적)
             while (_mover && _mover.IsFalling) yield return null;
-            if (!IsGoodDest(_dest)) { _dest = PickDest(_pillarCell); _destPos = _grid.CellCenter(_dest, _grid.FloorTopY); MoveCircle(_circle, _destPos + Vector3.up * 0.02f); }
+            if (!IsGoodDest(_dest)) { _dest = PickDest(_pillarCell); _destPos = _grid.CellCenter(_dest, _grid.FloorTopY); MoveCircle(_circle, _decal, _destPos + Vector3.up * 0.02f); }
             Status = "Anubis: pulling";
             if (_health) _health.GrantInvulnerability(_pullTime + _arriveInvul);
             if (_mover) _mover.enabled = false;
@@ -188,6 +192,7 @@ namespace HistoryCrash.Stage
                 float _k = 1f - _t / 0.5f;
                 SetEyes(_k); _pl.intensity = _pillarLightIntensity * _k; SetPillarGlow(_prs, 1f + (_pillarEmissionBoost - 1f) * _k);
                 foreach (var _lr in _circle) { var _c = _lr.startColor; _c.a = _k; _lr.startColor = _lr.endColor = _c; }
+                if (_decal != null) { _decalAngle += 50f * Time.deltaTime; _decal.Set(CircleColor(), _k, _decalAngle); }
                 yield return null;
             }
             SetEyes(0f); SetPillarGlow(_prs, 1f);
@@ -229,10 +234,11 @@ namespace HistoryCrash.Stage
             return _grid.NearestSafe(_from);
         }
 
-        private void MoveCircle(List<LineRenderer> _lines, Vector3 _pos)
+        private void MoveCircle(List<LineRenderer> _lines, MagicCircleDecal _decal, Vector3 _pos)
         {
-            if (_lines.Count == 0) return;
-            _lines[0].transform.parent.position = _pos;
+            if (_decal != null) _decal.Root.position = _pos;
+            else if (_lines.Count > 0) _lines[0].transform.parent.position = _pos;
+            else return;
             BurstAt(_pos + Vector3.up * 0.1f);
         }
 
@@ -333,6 +339,31 @@ namespace HistoryCrash.Stage
             }
         }
 
+        // ---------- 텍스처 마법진(아누비스의 자기 선언) ----------
+        private float _decalAngle;
+
+        /// <summary>기존 선 마법진과 같은 색(아누비스 눈 발광색을 정규화 × 2.5)</summary>
+        private Color CircleColor() { return _glowColor / Mathf.Max(_glowColor.maxColorComponent, 1e-3f) * 2.5f; }
+
+        private MagicCircleDecal MakeDecal(Transform _parent, Vector3 _pos)
+        {
+            var _tex = MagicCircleDecal.Load(MagicCircleDecal.ANUBIS);
+            if (!_tex) return null;
+            var _d = new MagicCircleDecal("Anubis_MagicCircle", _tex, _parent, _decalDiameter);
+            _d.Root.position = _pos;
+            return _d;
+        }
+
+        /// <summary>선 마법진과 같은 흐름: 드러나며 돌고, 이동이 가까울수록 빠르게 깜빡임</summary>
+        private void UpdateDecal(MagicCircleDecal _decal, float _u, float _time)
+        {
+            if (_decal == null) return;
+            _decalAngle += 50f * Time.deltaTime;
+            float _blink = _u < 0.6f ? 1f : 0.65f + 0.35f * Mathf.Sin(_time * Mathf.Lerp(8f, 26f, (_u - 0.6f) / 0.4f));
+            float _show = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(_u / 0.4f));
+            _decal.Set(CircleColor(), _show * _blink, _decalAngle, Mathf.Lerp(0.7f, 1f, _show));
+        }
+
         private ParticleSystem MakePs(string _name, Transform _parent, Vector3 _pos, int _max)
         {
             var _go = new GameObject(_name); _go.transform.SetParent(_parent, false); _go.transform.position = _pos;
@@ -385,7 +416,7 @@ namespace HistoryCrash.Stage
 
         private void OnGUI()
         {
-            if (!string.IsNullOrEmpty(Status)) GUI.Label(new Rect(20, 104, 400, 20), Status);
+            if (!string.IsNullOrEmpty(Status)) GUI.Label(new Rect(20, HistoryCrash.UI.DebugHudLayout.Top + 104, 400, 20), Status);
         }
     }
 }

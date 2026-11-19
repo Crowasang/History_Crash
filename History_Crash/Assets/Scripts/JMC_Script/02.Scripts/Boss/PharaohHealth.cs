@@ -14,7 +14,10 @@ namespace HistoryCrash.Boss
     public class PharaohHealth : MonoBehaviour
     {
         [SerializeField, FormerlySerializedAs("maxHP")] private int _maxHP = 1200;
+        [SerializeField, Tooltip("화면 위 디버그 체력 글자·막대(정식 UI는 BossPurifyBarUI)")] private bool _debugBar = false;
         public int HP { get; private set; }
+        public int MaxHP { get { return _maxHP; } }
+        public float LastHitTime { get; private set; } = -10f;
         public bool IsDead { get { return HP <= 0; } }
         private float _flashUntil;
 
@@ -24,13 +27,14 @@ namespace HistoryCrash.Boss
         {
             if (IsDead) return;
             HP = Mathf.Max(0, HP - _amount);
-            _flashUntil = Time.time + 0.4f;
+            _flashUntil = Time.time + 0.4f; LastHitTime = Time.time;
             Debug.Log("[Pharaoh] -" + _amount + " (" + _reason + ") HP " + HP + "/" + _maxHP);
             if (IsDead) Debug.Log("[Pharaoh] Defeated");
         }
 
         private void OnGUI()
         {
+            if (!_debugBar) return;
             float _w = Mathf.Min(520, Screen.width * 0.5f), _h = 18, _x = (Screen.width - _w) / 2, _y = 14;
             var _title = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold };
             GUI.Label(new Rect(_x, _y, _w, 20), "Pharaoh  " + HP + " / " + _maxHP, _title);
