@@ -109,9 +109,11 @@ public void TakeDamage(int damageAmount) { ... }
 |--------|------|
 | `main` | 항상 실행 가능한 안정 버전 |
 | `dev` | 개발 통합 브랜치 |
-| `feature/기능이름` | 기능 개발 (예: `feature/player-dash`) |
+| `feat/기능이름` | 기능 개발 (예: `feat/player-dash`) |
 | `fix/버그이름` | 버그 수정 (예: `fix/jump-bug`) |
+| `docs/문서이름` | 문서 수정 (예: `docs/git-convention`) |
 
 - `main`과 `dev`에는 직접 푸시하지 않고 Pull Request로 합칩니다.
-- `feature`, `fix` 브랜치는 `dev`로 합치고, `main`에는 `dev`에서만 합칩니다.
+- `feat`, `fix`, `docs` 브랜치는 `dev`로 합치고, `main`에는 `dev`에서만 합칩니다.
+- 브랜치 이름과 커밋 메시지 규칙은 [GIT_CONVENTION.md](GIT_CONVENTION.md)에도 정리되어 있습니다.
 - 같은 씬 파일을 여러 명이 동시에 수정하지 않도록 작업 전에 미리 공유합니다. (씬 충돌은 해결이 어렵습니다.)
