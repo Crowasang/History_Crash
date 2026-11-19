@@ -96,7 +96,7 @@ public void TakeDamage(int damageAmount) { ... }
 |------|------|------|
 | `feat` | 새 기능 추가 | `feat: 플레이어 대시 기능 추가` |
 | `fix` | 버그 수정 | `fix: 점프 중 이중 점프 되는 문제 수정` |
-| `docs` | 문서 수정 | `docs: 코딩 컨벤션 수정` |
+| `doc` | 문서 수정 | `doc: 코딩 컨벤션 수정` |
 
 - 한 커밋에는 한 가지 작업만 담습니다.
 - 커밋 전에 Unity에서 에러가 없는지 확인합니다.
@@ -111,9 +111,9 @@ public void TakeDamage(int damageAmount) { ... }
 | `dev` | 개발 통합 브랜치 |
 | `feat/기능이름` | 기능 개발 (예: `feat/player-dash`) |
 | `fix/버그이름` | 버그 수정 (예: `fix/jump-bug`) |
-| `docs/문서이름` | 문서 수정 (예: `docs/git-convention`) |
+| `doc/문서이름` | 문서 수정 (예: `doc/git-convention`) |
 
 - `main`과 `dev`에는 직접 푸시하지 않고 Pull Request로 합칩니다.
-- `feat`, `fix`, `docs` 브랜치는 `dev`로 합치고, `main`에는 `dev`에서만 합칩니다.
+- `feat`, `fix`, `doc` 브랜치는 `dev`로 합치고, `main`에는 `dev`에서만 합칩니다.
 - 브랜치 이름과 커밋 메시지 규칙은 [GIT_CONVENTION.md](GIT_CONVENTION.md)에도 정리되어 있습니다.
 - 같은 씬 파일을 여러 명이 동시에 수정하지 않도록 작업 전에 미리 공유합니다. (씬 충돌은 해결이 어렵습니다.)
