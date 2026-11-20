@@ -3935,6 +3935,7 @@ GameObject:
   - component: {fileID: 650339050}
   - component: {fileID: 650339049}
   - component: {fileID: 650339048}
+  - component: {fileID: 650339051}
   m_Layer: 0
   m_Name: GameManager
   m_TagString: Untagged
@@ -3994,6 +3995,20 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &650339051
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 650339047}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f05ad53f4d210de48b187f39c396c90d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PauseInputHandler
+  _pauseAction: {fileID: -8338598726356848359, guid: 052faaac586de48259a63d0c4782560b, type: 3}
+  _pauseControlSource: {fileID: 650339049}
 --- !u!65 &653292496
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -33606,6 +33621,7 @@ GameObject:
   - component: {fileID: 1794931744}
   - component: {fileID: 1794931745}
   - component: {fileID: 1794931746}
+  - component: {fileID: 1794931747}
   m_Layer: 0
   m_Name: Player
   m_TagString: Player
@@ -33719,7 +33735,6 @@ MonoBehaviour:
   _lookAction: {fileID: 6940538419726410420, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   _snapLeftAction: {fileID: 8314494281462653499, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   _snapRightAction: {fileID: -2012884766186116951, guid: 052faaac586de48259a63d0c4782560b, type: 3}
-  _cursorUnlockAction: {fileID: -2654847509051640293, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   _cursorLockAction: {fileID: 9072007003925121298, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   _cameraTarget: {fileID: 279381771}
   _camera: {fileID: 774609865}
@@ -33855,6 +33870,23 @@ MonoBehaviour:
   _arcHeight: 0.6
   _invincibleAfterArrival: 0.5
   _maxFallWait: 3
+--- !u!114 &1794931747
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1794931730}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9567ad88a35387445baf7cd1821fc352, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DisableWhilePaused
+  _gameFlowSource: {fileID: 650339049}
+  _targets:
+  - {fileID: 1794931738}
+  - {fileID: 1794931731}
+  - {fileID: 1175980018}
 --- !u!65 &1795164147
 BoxCollider:
   m_ObjectHideFlags: 0

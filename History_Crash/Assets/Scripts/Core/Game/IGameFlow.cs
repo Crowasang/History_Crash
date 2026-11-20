@@ -16,4 +16,7 @@ public interface IGameFlow
     float ElapsedTime { get; }
 
     bool IsPlaying { get; }
+
+    /// <summary>일시정지 중인지. 구독하면 바뀔 때마다 알림을 받습니다. (설정창 열기·닫기 등)</summary>
+    ReadOnlyReactiveProperty<bool> IsPaused { get; }
 }
