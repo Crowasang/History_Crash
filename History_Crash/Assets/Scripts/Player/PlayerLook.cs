@@ -17,9 +17,7 @@ public class PlayerLook : MonoBehaviour, ILookDirection
     [SerializeField] private InputActionReference _snapLeftAction;
     [Tooltip("시점 오른쪽 스냅 (C)")]
     [SerializeField] private InputActionReference _snapRightAction;
-    [Tooltip("커서 풀기 (Esc)")]
-    [SerializeField] private InputActionReference _cursorUnlockAction;
-    [Tooltip("커서 다시 잠그기 (좌클릭)")]
+    [Tooltip("커서 다시 잠그기 (좌클릭). 커서 풀기는 일시정지(Esc)가 이 컴포넌트를 꺼서 처리")]
     [SerializeField] private InputActionReference _cursorLockAction;
     [Tooltip("Cinemachine 카메라가 따라가는 어깨 높이 기준점 (플레이어 자식)")]
     [SerializeField] private Transform _cameraTarget;
@@ -100,19 +98,13 @@ public class PlayerLook : MonoBehaviour, ILookDirection
             _snapRightAction.action.Enable();
         }
 
-        if (_cursorUnlockAction != null)
-        {
-            _cursorUnlockAction.action.performed += OnCursorUnlock;
-            _cursorUnlockAction.action.Enable();
-        }
-
         if (_cursorLockAction != null)
         {
             _cursorLockAction.action.performed += OnCursorLock;
             _cursorLockAction.action.Enable();
         }
 
-        // 게임 중에는 커서를 숨기고 화면에 고정 (Esc로 풀고, 좌클릭으로 다시 잠금)
+        // 게임 중에는 커서를 숨기고 화면에 고정 (일시정지·게임 종료로 이 컴포넌트가 꺼지면 풀림)
         SetCursorLocked(true);
     }
 
@@ -133,12 +125,6 @@ public class PlayerLook : MonoBehaviour, ILookDirection
             _snapRightAction.action.Disable();
         }
 
-        if (_cursorUnlockAction != null)
-        {
-            _cursorUnlockAction.action.performed -= OnCursorUnlock;
-            _cursorUnlockAction.action.Disable();
-        }
-
         if (_cursorLockAction != null)
         {
             _cursorLockAction.action.performed -= OnCursorLock;
@@ -148,13 +134,7 @@ public class PlayerLook : MonoBehaviour, ILookDirection
         SetCursorLocked(false);
     }
 
-    // Esc를 누를 때만 호출됨
-    private void OnCursorUnlock(InputAction.CallbackContext _context)
-    {
-        SetCursorLocked(false);
-    }
-
-    // 좌클릭할 때만 호출됨
+    // 좌클릭할 때만 호출됨 (창 밖을 눌렀다 돌아왔을 때 등 커서가 풀려 있으면 다시 잠금)
     private void OnCursorLock(InputAction.CallbackContext _context)
     {
         SetCursorLocked(true);
@@ -169,7 +149,7 @@ public class PlayerLook : MonoBehaviour, ILookDirection
     // 마우스가 움직일 때만 호출됨
     private void OnLook(InputAction.CallbackContext _context)
     {
-        // 커서가 풀려 있으면(Esc) 시점을 돌리지 않음
+        // 커서가 풀려 있으면 시점을 돌리지 않음
         if (Cursor.lockState != CursorLockMode.Locked) return;
 
         Vector2 _delta = _context.ReadValue<Vector2>();

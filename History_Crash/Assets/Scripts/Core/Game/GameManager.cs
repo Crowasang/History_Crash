@@ -10,6 +10,8 @@ using UnityEngine;
 /// - 상태: 준비 → 진행 → 클리어 / 실패
 /// - 승패: 진행 중에 파라오가 죽으면 클리어, 플레이어가 죽으면 실패
 /// - 경과 시간: 진행 상태에서만 흐르고, UI용으로 1초마다 알림
+/// - 일시정지: 상태와 별개인 표시(IsPaused). 시간을 멈추고(timeScale 0), 풀면 원래 상태 그대로 이어감
+///   준비·진행 상태에서만 가능하고, 게임이 끝나거나 씬이 바뀌면 자동으로 풀림
 /// </summary>
 /// <example>
 /// // 다른 스크립트는 GameManager 대신 IGameFlow로 받습니다. (인스펙터에 GameManager 연결)
@@ -21,7 +23,7 @@ using UnityEngine;
 ///     .Subscribe(_state => SetSpawning(_state == GameStateType.Playing))
 ///     .AddTo(this);
 /// </example>
-public class GameManager : MonoBehaviour, IGameFlow
+public class GameManager : MonoBehaviour, IGameFlow, IPauseControl
 {
     [Header("Win / Lose")]
     [Tooltip("IHealthReadOnly를 구현한 컴포넌트 (Health)")]
@@ -37,6 +39,7 @@ public class GameManager : MonoBehaviour, IGameFlow
 
     private readonly ReactiveProperty<GameStateType> _currentState = new ReactiveProperty<GameStateType>(GameStateType.Ready);
     private readonly ReactiveProperty<int> _elapsedSeconds = new ReactiveProperty<int>(0);
+    private readonly ReactiveProperty<bool> _isPaused = new ReactiveProperty<bool>(false);
 
     private Dictionary<GameStateType, GameState> _states;
     private GameState _state;
@@ -60,6 +63,12 @@ public class GameManager : MonoBehaviour, IGameFlow
     public bool IsPlaying => _currentState.Value == GameStateType.Playing;
 
     public float ReadyDuration => _readyDuration;
+
+    /// <summary>일시정지 중인지. 구독하면 바뀔 때마다 알림을 받습니다.</summary>
+    public ReadOnlyReactiveProperty<bool> IsPaused => _isPaused;
+
+    /// <summary>준비·진행 상태에서만 일시정지할 수 있음</summary>
+    public bool CanPause => _currentState.Value == GameStateType.Ready || _currentState.Value == GameStateType.Playing;
 
     private void Awake()
     {
@@ -110,10 +119,17 @@ public class GameManager : MonoBehaviour, IGameFlow
 
     private void OnDestroy()
     {
+        // 일시정지 중에 씬이 바뀌어도(재시작 버튼 등) 다음 씬이 멈춘 채 시작하지 않도록 시간을 되돌림
+        if (_isPaused.Value)
+        {
+            Time.timeScale = 1f;
+        }
+
         _state?.Exit();
         CancelTimerLoop();
         _currentState.Dispose();
         _elapsedSeconds.Dispose();
+        _isPaused.Dispose();
 
         if (Instance == this)
         {
@@ -143,8 +159,33 @@ public class GameManager : MonoBehaviour, IGameFlow
         EnterState(_next);
     }
 
+    public void Pause()
+    {
+        if (_isPaused.Value || !CanPause) return;
+
+        Time.timeScale = 0f;
+        _isPaused.Value = true;
+    }
+
+    public void Resume()
+    {
+        if (!_isPaused.Value) return;
+
+        Time.timeScale = 1f;
+        _isPaused.Value = false;
+    }
+
+    public void TogglePause()
+    {
+        if (_isPaused.Value) Resume();
+        else Pause();
+    }
+
     private void EnterState(GameStateType _next)
     {
+        // 게임이 끝나는 등 상태가 바뀌면 일시정지는 풀고 들어감
+        Resume();
+
         _state?.Exit();
         _state = _states[_next];
         _currentState.Value = _next;
