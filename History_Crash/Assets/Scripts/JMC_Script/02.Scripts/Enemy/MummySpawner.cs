@@ -23,7 +23,6 @@ namespace HistoryCrash.Enemy
         [SerializeField, FormerlySerializedAs("director")] private BossPatternDirector _director;
         [SerializeField, FormerlySerializedAs("player")] private Transform _player;
         [SerializeField, FormerlySerializedAs("pharaoh")] private Transform _pharaoh;
-        [SerializeField, FormerlySerializedAs("pharaohHealth")] private PharaohHealth _pharaohHealth;
         [SerializeField, FormerlySerializedAs("femalePrefab")] private GameObject _femalePrefab;
         [SerializeField, FormerlySerializedAs("malePrefab")] private GameObject _malePrefab;
 
@@ -35,11 +34,14 @@ namespace HistoryCrash.Enemy
         [SerializeField, FormerlySerializedAs("riseTime")] private float _riseTime = 0.6f;
         [SerializeField, FormerlySerializedAs("footOffset"), Tooltip("모델 원점에서 발바닥까지(바닥 위로 올리는 양, m)")] private float _footOffset = 0.07f;
 
-        private PlayerMover _mover; private PlayerHealth _health;
+        // 플레이어·파라오 연결 (KDH 코어 인터페이스)
+        private IJumpState _jump; private ISpeedModifier _speed; private IDamageable _health;
+        private IDamageable _pharaohHealth;
 
         private void Start()
         {
-            if (_player) { _mover = _player.GetComponent<PlayerMover>(); _health = _player.GetComponent<PlayerHealth>(); }
+            if (_player) { _jump = _player.GetComponent<IJumpState>(); _speed = _player.GetComponent<ISpeedModifier>(); _health = _player.GetComponent<IDamageable>(); }
+            if (_pharaoh) _pharaohHealth = _pharaoh.GetComponent<IDamageable>();
             if (_director) _director.OnPatternGap += SpawnWave;
         }
 
@@ -61,7 +63,7 @@ namespace HistoryCrash.Enemy
 
         public void SpawnWave()
         {
-            if (_pharaohHealth && _pharaohHealth.IsDead) return;
+            if (_pharaohHealth != null && !_pharaohHealth.IsAlive) return;
             for (int _i = 0; _i < _perGap; _i++)
             {
                 // 아직 솟아오르는 중인 머미(pending)까지 세어 최대 수를 넘지 않게
@@ -94,11 +96,13 @@ namespace HistoryCrash.Enemy
             yield return new WaitForSeconds(_flameTime * 0.6f);
 
             var _prefab = _gender == MummyGender.Female ? _femalePrefab : _malePrefab;
-            var _go = Instantiate(_prefab, _floor - Vector3.up * 1.1f, Quaternion.LookRotation(FlatTo(_player ? _player.position : _floor + Vector3.forward, _floor), Vector3.up));
+            // 소환기 자식으로 생성: 게임이 끝나 소환기가 꺼지면(ActiveOnlyWhilePlaying) 미라도 함께 멈춤
+            var _go = Instantiate(_prefab, _floor - Vector3.up * 1.1f, Quaternion.LookRotation(FlatTo(_player ? _player.position : _floor + Vector3.forward, _floor), Vector3.up), transform);
             _go.name = "Mummy_" + _gender + "_" + ElementInfo.Name(_element);
             _pending--;   // 생성되는 순간부터 Mummy.Alive에 들어감
             var _m = _go.GetComponent<Mummy>();
-            _m.Grid = _grid; _m.Player = _player; _m.PlayerMover = _mover; _m.PlayerHealth = _health; _m.Pharaoh = _pharaoh; _m.PharaohHealth = _pharaohHealth;
+            _m.Grid = _grid; _m.Player = _player; _m.PlayerJump = _jump; _m.PlayerMoveSpeed = _speed != null ? _speed.BaseMoveSpeed : 4f;
+            _m.PlayerHealth = _health; _m.Pharaoh = _pharaoh; _m.PharaohHealth = _pharaohHealth;
             _m.Init(_gender, _element);
             if (_m.Animator) _m.Animator.Play("Walk", 0, 0f);
 

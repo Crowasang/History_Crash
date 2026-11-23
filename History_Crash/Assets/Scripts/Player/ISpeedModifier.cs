@@ -10,4 +10,7 @@ public interface ISpeedModifier
 {
     /// <summary>이동 속도 배율 (기본 1, 0이면 정지). 바꾸면 바로 적용됩니다.</summary>
     float SpeedMultiplier { get; set; }
+
+    /// <summary>기본 걷기 속도 (m/초, 달리기·배율 적용 전). 미라처럼 플레이어 속도 기준으로 움직이는 쪽이 씀</summary>
+    float BaseMoveSpeed { get; }
 }

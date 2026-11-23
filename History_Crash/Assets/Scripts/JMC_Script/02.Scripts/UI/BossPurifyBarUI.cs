@@ -1,3 +1,4 @@
+using R3;
 using UnityEngine;
 using UnityEngine.UI;
 using HistoryCrash.Boss;
@@ -8,7 +9,7 @@ namespace HistoryCrash.UI
     /// 보스 체력바: 화면 위 가운데의 도감 두루마리. 체력을 "깎는" 대신 오염(검은 얼룩 + 초록 핏줄)이 "정화"되며 물러난다.
     /// - 바닥 = 정화된 띠, 위 = 오염된 띠(남은 체력만큼 왼쪽부터 보임), 경계 = 금빛으로 타들어 가는 조각.
     /// - 이미지는 Blender 렌더를 미리 구운 것(Assets/Art/Resources/UI/BossBar/).
-    /// - 씬에 배치하지 않아도 PharaohHealth가 있는 씬에서 스스로 만들어진다.
+    /// - 씬에 배치하지 않아도 GameManager에 보스 체력(Health)이 연결된 씬에서 스스로 만들어진다.
     /// </summary>
     public class BossPurifyBarUI : MonoBehaviour
     {
@@ -17,8 +18,9 @@ namespace HistoryCrash.UI
         private const float GROOVE_L = 163f, GROOVE_R = 1437f; // 체력 홈 왼쪽·오른쪽 끝(px)
         private const float EDGE_W = 140f;                     // 경계 조각 폭(px)
 
-        [Header("참조")]
-        [SerializeField, Tooltip("비우면 씬에서 찾음")] private PharaohHealth _boss;
+        // 보스 체력 (KDH 코어: GameManager.BossHealth = 파라오의 Health)
+        private IHealthReadOnly _boss;
+        private float _lastHitTime = -10f;
 
         [Header("배치(기준 해상도 1920×1080)")]
         [SerializeField] private float _width = 640f;
@@ -43,15 +45,16 @@ namespace HistoryCrash.UI
         private static void AutoCreate()
         {
             if (FindFirstObjectByType<BossPurifyBarUI>()) return;
-            if (!FindFirstObjectByType<PharaohHealth>()) return;
+            if (GameManager.Instance == null || GameManager.Instance.BossHealth == null) return;
             new GameObject("UI_BossPurifyBar").AddComponent<BossPurifyBarUI>();
         }
 
         private void Start()
         {
-            if (!_boss) _boss = FindFirstObjectByType<PharaohHealth>();
+            _boss = GameManager.Instance != null ? GameManager.Instance.BossHealth : null;
+            if (_boss != null) _boss.OnDamaged.Subscribe(_ => _lastHitTime = Time.time).AddTo(this);   // 맞은 순간 경계 반짝임
             Build();
-            if (_boss) _shown = Fraction();
+            if (_boss != null) _shown = Fraction();
             Apply(_shown, 0f);
         }
 
@@ -92,7 +95,7 @@ namespace HistoryCrash.UI
         }
 
         private float Scale { get { return _width / IMG_W; } }
-        private float Fraction() { return _boss.MaxHP > 0 ? Mathf.Clamp01(_boss.HP / (float)_boss.MaxHP) : 0f; }
+        private float Fraction() { return _boss.MaxHp > 0 ? Mathf.Clamp01(_boss.CurrentHp.CurrentValue / (float)_boss.MaxHp) : 0f; }
 
         private static RawImage NewImage(string _name, Transform _parent)
         {
@@ -104,18 +107,18 @@ namespace HistoryCrash.UI
 
         private void Update()
         {
-            if (!_boss || _mask == null) return;
+            if (_boss == null || _mask == null) return;
             float _target = Fraction();
             // 정화는 처음 빠르게 붙고 끝에서 느려짐(값 차이에 비례 + 최소 속도)
             float _gap = _shown - _target;
             float _step = (Mathf.Abs(_gap) * 4f + _follow * 0.15f) * Time.unscaledDeltaTime;
             _shown = Mathf.Abs(_gap) <= _step ? _target : _shown - Mathf.Sign(_gap) * _step;
 
-            float _flash = Mathf.Clamp01(1f - (Time.time - _boss.LastHitTime) / _flashTime);
+            float _flash = Mathf.Clamp01(1f - (Time.time - _lastHitTime) / _flashTime);
             Apply(_shown, _flash);
 
             // 완전히 정화되면 잠시 뒤 사라짐
-            if (_boss.IsDead && _shown <= 0f)
+            if (!_boss.IsAlive && _shown <= 0f)
             {
                 if (_deadAt < 0f) _deadAt = Time.unscaledTime;
                 _group.alpha = Mathf.Clamp01(1f - (Time.unscaledTime - _deadAt - _hideDelay) / 0.8f);
