@@ -88,7 +88,7 @@ namespace HistoryCrash.Boss
         private Transform[] _roots = new Transform[5];
         private Transform _copesh, _sunRoot, _vfxD, _sun;
         private Transform[] _shards;
-        private PlayerMover _mover;
+        private IJumpState _jumpState;   // 점프 회피 판정 (PlayerController)
         private Transform[] _gemPivots = new Transform[5], _gems = new Transform[5];
         private Transform[] _staffs = new Transform[5];
         private float _kA = 1f; private float[] _kC = { 1, 1, 1, 1, 1 };
@@ -137,7 +137,7 @@ namespace HistoryCrash.Boss
             var _shardList = new System.Collections.Generic.List<Transform>();
             foreach (Transform _t in _sunRoot) if (_t.name.Contains("shard")) _shardList.Add(_t);
             _shards = _shardList.ToArray();
-            _mover = _player.GetComponent<PlayerMover>();
+            _jumpState = _player.GetComponent<IJumpState>();
             for (int _i = 0; _i < 5; _i++)
             {
                 string _suf = _i == 0 ? "" : ".00" + _i;
@@ -781,7 +781,7 @@ namespace HistoryCrash.Boss
         private readonly Collider[] _overlapBuf = new Collider[16];
         const int HIT_LAYER = 2; // Ignore Raycast: 카메라 충돌 검사(DefaultRaycastLayers)에 걸리지 않음
         private float _playerRadius = 0.29f;
-        private PlayerHealth _health;
+        private IDamageable _health;   // 플레이어 체력 (Health)
 
         private void BuildHitBoxes()
         {
@@ -796,7 +796,7 @@ namespace HistoryCrash.Boss
                 var _r = _playerModel.GetComponent<Renderer>();
                 if (_r) _playerRadius = _r.bounds.extents.y;
             }
-            _health = _player.GetComponent<PlayerHealth>();
+            _health = _player.GetComponent<IDamageable>();
         }
 
         private void AddHitBox(Transform _t, int _pattern, int _slot, string _label)
@@ -830,7 +830,7 @@ namespace HistoryCrash.Boss
         }
 
         private static float Flat(Vector3 _v) { _v.y = 0; return _v.magnitude; }
-        private bool Airborne() { return _mover != null && _mover.HeightAboveGround > _dodgeHeight; }
+        private bool Airborne() { return _jumpState != null && _jumpState.GetHeightAboveGround() > _dodgeHeight; }
 
         private void Hit(int _slot, bool _cond, string _label)
         {
@@ -841,8 +841,8 @@ namespace HistoryCrash.Boss
             _flashUntil = Time.time + 0.35f;
             // C 보석은 0.55초 간격이라 무적(1초)에 막히지 않게, 맞을 때마다 1씩 깎는다
             bool _ignoreInvul = _current == (int)BossPattern.C && _cIgnoreInvulnerability;
-            bool _damaged = _health != null && _health.TakeDamage(1, _label, _ignoreInvul);
-            Debug.Log("[BossPattern] Hit: " + _label + " (total " + HitCount + ", damage=" + _damaged + ")");
+            if (_health != null) _health.TakeDamage(new DamageInfo(1, ElementType.None, gameObject, _ignoreInvul));
+            Debug.Log("[BossPattern] Hit: " + _label + " (total " + HitCount + ", ignoreInvul=" + _ignoreInvul + ")");
         }
 
         private void OnGUI()

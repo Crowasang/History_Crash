@@ -75,6 +75,14 @@ namespace HistoryCrash.Stage
         private char _lastType = ' ';
         private float _phaseEnd; private string _phaseName = "wait"; private char _currentType = ' ';
 
+        // 물리로 움직이는 플레이어(PlayerController)가 실제로 구멍에 빠지도록 타일 콜라이더도 끄고 켬
+        // (빠지면 바닥 아래 FallZone이 피해·복귀 처리)
+        private static void SetTileCollider(HorusTile _tile, bool _on)
+        {
+            var _col = _tile.R ? _tile.R.GetComponent<Collider>() : null;
+            if (_col) _col.enabled = _on;
+        }
+
         private void Awake()
         {
             _mpb = new MaterialPropertyBlock();
@@ -437,7 +445,7 @@ namespace HistoryCrash.Stage
                 SetEyes(1f);
 
                 // 2) 붕괴: 사암 파편·자갈·먼지가 튀고, 타일은 빠르게 꺼지며 심연이 드러남
-                foreach (HorusTile _t in _tiles) { _grid.SetHole(_t.Cell, true); _t.Glow.SetActive(false); PitOf(_t).SetActive(true); EmitBreak(_t); }
+                foreach (HorusTile _t in _tiles) { _grid.SetHole(_t.Cell, true); SetTileCollider(_t, false); _t.Glow.SetActive(false); PitOf(_t).SetActive(true); EmitBreak(_t); }
                 SetWarnGlow(0); SetCrackEmission(_tiles, 1f);
                 _brokenTiles = _tiles;
                 _phaseName = "broken"; _phaseEnd = Time.time + _brokenTime;
@@ -472,7 +480,7 @@ namespace HistoryCrash.Stage
                     SetEyes(1f - _u);
                     yield return null;
                 }
-                foreach (HorusTile _tl in _tiles) { _tl.Mesh.localPosition = _tl.BasePos; _tl.Mesh.localScale = _tl.BaseScale; _grid.SetHole(_tl.Cell, false); if (_tl.Pit) _tl.Pit.SetActive(false); }
+                foreach (HorusTile _tl in _tiles) { _tl.Mesh.localPosition = _tl.BasePos; _tl.Mesh.localScale = _tl.BaseScale; _grid.SetHole(_tl.Cell, false); SetTileCollider(_tl, true); if (_tl.Pit) _tl.Pit.SetActive(false); }
                 SetEyes(0f);
 
                 _phaseName = "wait"; _currentType = ' ';
