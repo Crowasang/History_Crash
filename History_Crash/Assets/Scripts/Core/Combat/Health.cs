@@ -11,7 +11,7 @@ using UnityEngine;
 /// _health.CurrentHp.Subscribe(_hp => UpdateHeartUI(_hp)).AddTo(this);
 /// _health.OnDeath.Subscribe(_ => PlayDeathEffect()).AddTo(this);
 /// </example>
-public class Health : MonoBehaviour, IDamageable, IHealthReadOnly, IPoolable
+public class Health : MonoBehaviour, IDamageable, IHealthReadOnly, IInvincible, IPoolable
 {
     [SerializeField] private int _maxHp = 100;
 
@@ -53,7 +53,8 @@ public class Health : MonoBehaviour, IDamageable, IHealthReadOnly, IPoolable
 
     public void TakeDamage(DamageInfo _info)
     {
-        if (!IsAlive || IsInvincible || _info.Amount <= 0) return;
+        if (!IsAlive || _info.Amount <= 0) return;
+        if (IsInvincible && !_info.IgnoreInvulnerability) return;
 
         _currentHp.Value = Mathf.Max(0, _currentHp.Value - _info.Amount);
         _onDamaged.OnNext(_info);
