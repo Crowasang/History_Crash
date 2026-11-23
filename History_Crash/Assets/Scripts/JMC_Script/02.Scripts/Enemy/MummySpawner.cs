@@ -27,6 +27,7 @@ namespace HistoryCrash.Enemy
         [SerializeField, FormerlySerializedAs("malePrefab")] private GameObject _malePrefab;
 
         [SerializeField, FormerlySerializedAs("maxAlive"), Tooltip("동시에 살아 있을 수 있는 최대 수")] private int _maxAlive = 5;
+        [SerializeField, Tooltip("미라 1킬당 파라오에게 주는 피해 (기획 v20: 20 → 맞히기 힘들어 25로 조정)")] private int _pharaohDamagePerKill = 25;
         [SerializeField, FormerlySerializedAs("perGap"), Tooltip("패턴 사이마다 소환할 수")] private int _perGap = 1;
         [SerializeField, FormerlySerializedAs("spawnSpread"), Tooltip("소환 칸 후보: 계단 아래 기준 칸에서 이 칸수 안")] private int _spawnSpread = 1;
         [SerializeField, FormerlySerializedAs("spawnCells"), Tooltip("직접 지정한 소환 칸(비우면 자동)")] private List<Vector2Int> _spawnCells = new List<Vector2Int>();
@@ -103,6 +104,7 @@ namespace HistoryCrash.Enemy
             var _m = _go.GetComponent<Mummy>();
             _m.Grid = _grid; _m.Player = _player; _m.PlayerJump = _jump; _m.PlayerMoveSpeed = _speed != null ? _speed.BaseMoveSpeed : 4f;
             _m.PlayerHealth = _health; _m.Pharaoh = _pharaoh; _m.PharaohHealth = _pharaohHealth;
+            _m.PharaohDamage = _pharaohDamagePerKill;
             _m.Init(_gender, _element);
             if (_m.Animator) _m.Animator.Play("Walk", 0, 0f);
 

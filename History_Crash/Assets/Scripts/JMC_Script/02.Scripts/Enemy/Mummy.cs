@@ -65,6 +65,8 @@ namespace HistoryCrash.Enemy
         [SerializeField, FormerlySerializedAs("meltTime")] private float _meltTime = 1.4f;
         [SerializeField, FormerlySerializedAs("meltDepth")] private float _meltDepth = 0.9f;
         [SerializeField, FormerlySerializedAs("pharaohDamage")] private int _pharaohDamage = 20;
+        /// <summary>처치 시 파라오에게 주는 피해 (소환기가 채움)</summary>
+        public int PharaohDamage { get => _pharaohDamage; set => _pharaohDamage = value; }
         [SerializeField, FormerlySerializedAs("spiritRise")] private float _spiritRise = 1.4f;
         [SerializeField, FormerlySerializedAs("spiritRiseTime")] private float _spiritRiseTime = 0.7f;
         [SerializeField, FormerlySerializedAs("spiritFlyTime")] private float _spiritFlyTime = 1.0f;
@@ -276,7 +278,7 @@ namespace HistoryCrash.Enemy
                 yield return null;
             }
             ElementFx.Burst(_element, _target, 1.6f, 40);
-            if (_pharaohHealth != null) _pharaohHealth.TakeDamage(new DamageInfo(_pharaohDamage, ElementType.None, gameObject));   // 미라 1킬 = 파라오 피해 20 (기획 v20)
+            if (_pharaohHealth != null) _pharaohHealth.TakeDamage(new DamageInfo(_pharaohDamage, ElementType.None, gameObject));   // 미라 1킬 = 파라오 피해 (기획 v20: 20, 소환기에서 조정)
             var _trail = _spirit.GetComponentInChildren<ParticleSystem>();
             if (_trail) { _trail.transform.SetParent(null, true); var _em = _trail.emission; _em.rateOverTime = 0; Destroy(_trail.gameObject, 1f); }
             Destroy(_spirit);
