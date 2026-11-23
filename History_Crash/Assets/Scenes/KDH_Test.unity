@@ -3813,6 +3813,63 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 2, y: 0.2, z: 2}
   m_Center: {x: 0, y: 0.1, z: 0}
+--- !u!1 &593189368
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 593189370}
+  - component: {fileID: 593189369}
+  m_Layer: 0
+  m_Name: MummySpawner
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &593189369
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 593189368}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c77f96792fd618f4bb15ff486c613fae, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::HistoryCrash.Enemy.MummySpawner
+  _grid: {fileID: 1965269510}
+  _director: {fileID: 1965269509}
+  _player: {fileID: 1794931735}
+  _pharaoh: {fileID: 2102868730}
+  _femalePrefab: {fileID: 819696323086424496, guid: 94c87beec4f61a248bd1386bab32ab56, type: 3}
+  _malePrefab: {fileID: 8093390285150480303, guid: b1f08e226ff12094bb3273275c96cb4c, type: 3}
+  _maxAlive: 5
+  _perGap: 1
+  _spawnSpread: 1
+  _spawnCells: []
+  _flameTime: 0.9
+  _riseTime: 0.6
+  _footOffset: 0.07
+--- !u!4 &593189370
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 593189368}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!65 &598139303
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -4308,6 +4365,7 @@ MonoBehaviour:
   _gameFlowSource: {fileID: 650339049}
   _targets:
   - {fileID: 1965269505}
+  - {fileID: 593189368}
 --- !u!65 &653292496
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -33875,6 +33933,7 @@ GameObject:
   - component: {fileID: 1794931745}
   - component: {fileID: 1794931746}
   - component: {fileID: 1794931747}
+  - component: {fileID: 1794931748}
   m_Layer: 0
   m_Name: Player
   m_TagString: Player
@@ -34142,6 +34201,51 @@ MonoBehaviour:
   - {fileID: 1794931738}
   - {fileID: 1794931731}
   - {fileID: 1175980018}
+--- !u!114 &1794931748
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1794931730}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 03f6d9f90917c5b49ab2010ae5cfd53d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::HistoryCrash.Player.PlayerLoadout
+  _grid: {fileID: 0}
+  _model: {fileID: 0}
+  _animator: {fileID: 0}
+  _pickupRange: 1
+  _pickupState: Pickup_Object_Robe
+  _boltSpeed: 16
+  _boltRange: 14
+  _boltHitRadius: 0.55
+  _muzzleHeight: 0.35
+  _castStates:
+  - PattenA_Sweep_fast
+  - PattenB_Trap_fast
+  - PattenC_Volley_v3
+  - PattenD_SunDrop_fast
+  - PattenE_Spear_fast_Robe
+  _releaseTimes:
+  - 1.2
+  - 2.1
+  - 0.97
+  - 1.3
+  - 1.4
+  _castAnimSpeed: 1.6
+  _castRecovery: 0.35
+  _socketLocal: {x: 0, y: 0.19, z: 0}
+  _socketSize: 0.088
+  _socketSpin: 90
+  _moveCastStates:
+  - CastC_Move_Forward_Robe
+  - CastC_Move_Back_Robe
+  - CastC_Move_StrafeLeft
+  - CastC_Move_StrafeRight
+  _castMoveSpeedScale: 0.6
+  _castEndNormalized: 0.95
 --- !u!65 &1795164147
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -42558,3 +42662,4 @@ SceneRoots:
   - {fileID: 2833443442021339729}
   - {fileID: 2127037975}
   - {fileID: 1965269511}
+  - {fileID: 593189370}
