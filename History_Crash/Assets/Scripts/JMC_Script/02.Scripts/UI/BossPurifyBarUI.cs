@@ -20,6 +20,8 @@ namespace HistoryCrash.UI
 
         // 보스 체력 (KDH 코어: GameManager.BossHealth = 파라오의 Health)
         private IHealthReadOnly _boss;
+        // GameManager가 없는 씬(TEST_JMC 등)은 예전 JMC 파라오 체력으로
+        private PharaohHealth _legacy;
         private float _lastHitTime = -10f;
 
         [Header("배치(기준 해상도 1920×1080)")]
@@ -45,7 +47,8 @@ namespace HistoryCrash.UI
         private static void AutoCreate()
         {
             if (FindFirstObjectByType<BossPurifyBarUI>()) return;
-            if (GameManager.Instance == null || GameManager.Instance.BossHealth == null) return;
+            bool _core = GameManager.Instance != null && GameManager.Instance.BossHealth != null;
+            if (!_core && !FindFirstObjectByType<PharaohHealth>()) return;
             new GameObject("UI_BossPurifyBar").AddComponent<BossPurifyBarUI>();
         }
 
@@ -53,8 +56,9 @@ namespace HistoryCrash.UI
         {
             _boss = GameManager.Instance != null ? GameManager.Instance.BossHealth : null;
             if (_boss != null) _boss.OnDamaged.Subscribe(_ => _lastHitTime = Time.time).AddTo(this);   // 맞은 순간 경계 반짝임
+            else _legacy = FindFirstObjectByType<PharaohHealth>();
             Build();
-            if (_boss != null) _shown = Fraction();
+            if (HasBoss) _shown = Fraction();
             Apply(_shown, 0f);
         }
 
@@ -95,7 +99,14 @@ namespace HistoryCrash.UI
         }
 
         private float Scale { get { return _width / IMG_W; } }
-        private float Fraction() { return _boss.MaxHp > 0 ? Mathf.Clamp01(_boss.CurrentHp.CurrentValue / (float)_boss.MaxHp) : 0f; }
+        private bool HasBoss { get { return _boss != null || _legacy; } }
+        private float Fraction()
+        {
+            if (_boss != null) return _boss.MaxHp > 0 ? Mathf.Clamp01(_boss.CurrentHp.CurrentValue / (float)_boss.MaxHp) : 0f;
+            return _legacy.MaxHP > 0 ? Mathf.Clamp01(_legacy.HP / (float)_legacy.MaxHP) : 0f;
+        }
+        private float LastHit { get { return _boss != null ? _lastHitTime : _legacy.LastHitTime; } }
+        private bool BossAlive { get { return _boss != null ? _boss.IsAlive : !_legacy.IsDead; } }
 
         private static RawImage NewImage(string _name, Transform _parent)
         {
@@ -107,18 +118,18 @@ namespace HistoryCrash.UI
 
         private void Update()
         {
-            if (_boss == null || _mask == null) return;
+            if (!HasBoss || _mask == null) return;
             float _target = Fraction();
             // 정화는 처음 빠르게 붙고 끝에서 느려짐(값 차이에 비례 + 최소 속도)
             float _gap = _shown - _target;
             float _step = (Mathf.Abs(_gap) * 4f + _follow * 0.15f) * Time.unscaledDeltaTime;
             _shown = Mathf.Abs(_gap) <= _step ? _target : _shown - Mathf.Sign(_gap) * _step;
 
-            float _flash = Mathf.Clamp01(1f - (Time.time - _lastHitTime) / _flashTime);
+            float _flash = Mathf.Clamp01(1f - (Time.time - LastHit) / _flashTime);
             Apply(_shown, _flash);
 
             // 완전히 정화되면 잠시 뒤 사라짐
-            if (!_boss.IsAlive && _shown <= 0f)
+            if (!BossAlive && _shown <= 0f)
             {
                 if (_deadAt < 0f) _deadAt = Time.unscaledTime;
                 _group.alpha = Mathf.Clamp01(1f - (Time.unscaledTime - _deadAt - _hideDelay) / 0.8f);

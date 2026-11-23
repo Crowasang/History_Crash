@@ -39,6 +39,16 @@ namespace HistoryCrash.UI
         [SerializeField, Tooltip("도감 삽화 인트로 — 한국어")] private VideoClip _introKo;
         [SerializeField, Tooltip("도감 삽화 인트로 — 영어")] private VideoClip _introEn;
         [SerializeField, Tooltip("빈 펼친 도감(책장을 넘긴 뒤 조작법 페이지 바탕) — Assets/Art/TEST_JMC/MainMenu/UI")] private Texture2D _bookSpread;
+        [Header("책갈피(Blender 책 장면에 천 리본을 넣어 같은 카메라·조명으로 렌더한 겹침 그림) — Assets/Art/TEST_JMC/MainMenu/UI/Ribbon")]
+        [SerializeField, Tooltip("우측 리본 한국어: 0 건너뛰기, 1 다음 장, 2 모험 시작")] private Texture2D[] _ribbonNextKo = new Texture2D[3];
+        [SerializeField, Tooltip("우측 리본 영어: 0 Skip, 1 Next page, 2 Begin")] private Texture2D[] _ribbonNextEn = new Texture2D[3];
+        [SerializeField, Tooltip("좌측 리본(이전 장) 한국어")] private Texture2D _ribbonBackKo;
+        [SerializeField, Tooltip("좌측 리본(Back) 영어")] private Texture2D _ribbonBackEn;
+        [SerializeField, Tooltip("나타날 때 들린 채 → 내려앉는 프레임(우측 건너뛰기, 한국어)")] private Texture2D[] _ribbonSkipKoDrape;
+        [SerializeField, Tooltip("나타날 때 내려앉는 프레임(우측 Skip, 영어)")] private Texture2D[] _ribbonSkipEnDrape;
+        [SerializeField, Tooltip("나타날 때 내려앉는 프레임(좌측 이전 장, 한국어)")] private Texture2D[] _ribbonBackKoDrape;
+        [SerializeField, Tooltip("나타날 때 내려앉는 프레임(좌측 Back, 영어)")] private Texture2D[] _ribbonBackEnDrape;
+        [SerializeField, Tooltip("리본이 표지·책상 위로 내려앉는 시간(초)")] private float _drapeTime = 0.45f;
         [Header("흐름")]
         [SerializeField, Tooltip("인트로가 끝나면 불러올 씬 이름")] private string _gameScene = "TEST_JMC";
         [SerializeField, Tooltip("빌드 목록에 없을 때 에디터에서 불러올 씬 경로")] private string _gameScenePath = "Assets/Art/Scene/TEST_JMC.unity";
@@ -59,7 +69,11 @@ namespace HistoryCrash.UI
         private readonly List<string> _items = new List<string>();
         private readonly List<TextMeshProUGUI> _itemTexts = new List<TextMeshProUGUI>();
         private int _sel;
-        private bool _hasSave, _entered, _busy, _skipRequested;
+        private bool _hasSave, _entered, _busy, _skipRequested, _skipIntro;
+        private CanvasGroup _bookmarkGroup;
+        private RawImage _nextRibbon, _backRibbon;
+        private CanvasGroup _backGroup;
+        private bool _bookmarkClicked, _choseBack;
         private CanvasGroup _menuGroup, _titleGroup;
         private RectTransform _selMark;
         private Image _black;
@@ -74,7 +88,7 @@ namespace HistoryCrash.UI
 
         // 책장 넘김·조작법 페이지
         private RectTransform _book;
-        private RawImage _newSpread, _oldLeft, _flipFront, _flipBack;
+        private RawImage _newSpread, _oldLeft, _oldRight, _flipFront, _flipBack;
         private CanvasGroup _ctrlGroup, _turnGroup;
         private TextMeshProUGUI _turnLabel;
         private RenderTexture _snapRT;
@@ -104,6 +118,7 @@ namespace HistoryCrash.UI
             BuildUI();
             // Settings 메뉴 = 게임 안 ESC 설정창과 같은 도감(자기 Canvas를 만들므로 따로 된 오브젝트에)
             _settings = new GameObject("UI_PauseSettings").AddComponent<PauseSettingsUI>();
+            _settings.AllowEscOpen = false;   // 메인메뉴에서는 Esc로 열리지 않음(Settings 메뉴로만, 열린 창은 Esc로 닫힘)
             StartCoroutine(Intro());
         }
 
@@ -148,22 +163,30 @@ namespace HistoryCrash.UI
             if (_intro)
             {
                 yield return PlayClip(_intro, false, 0.2f);
-                _skipRequested = false;
                 var _p = _vp[_front];
                 long _hold = (long)_p.frameCount - HOLD_BEFORE_END;      // 영상 끝의 암전 직전 장면에서 멈춤
-                float _t0 = Time.unscaledTime;
-                if (_testFromIntroEnd) { _skipRequested = true; _t0 -= 1f; }
+                // 건너뛰기는 우측 책갈피(Skip)를 눌렀을 때만 — 아무 데나 클릭해도 넘어가지 않음
+                _skipIntro = _testFromIntroEnd;
+                ShowBookmark(true);
                 while (_p.isPlaying && _p.frame < _hold)
                 {
-                    if (_skipRequested && Time.unscaledTime - _t0 > 0.8f) { _p.frame = _hold; break; }   // 건너뛰면 마지막 장면(나레이션이 다 쌓인 쪽)으로
+                    if (_skipIntro) { _p.frame = _hold; break; }          // 마지막 장면(나레이션이 다 쌓인 쪽)으로
                     yield return null;
                 }
                 _p.Pause();
                 for (int i = 0; i < 3; i++) yield return null;           // 건너뛴 장면이 그려질 때까지
-                // 시네마틱이 끝나면 우측 페이지 하단에 '다음 장' 표시 → 넘기면 조작법 페이지
-                yield return WaitPageTurn(GameLanguage.T("다음 장", "Next page"));
-                yield return TurnToControls();
-                yield return WaitPageTurn(GameLanguage.T("모험 시작", "Begin"));
+                // 시네마틱이 끝나면 같은 책갈피가 '다음 장' 버튼으로 바뀜 → 누르면 조작법 페이지 → '모험 시작'
+                yield return WaitBookmark(1, false);
+                while (true)
+                {
+                    yield return TurnToControls();
+                    // 조작법 페이지: 우측 = 모험 시작, 좌측 = 이전 장(이야기 페이지로 되돌아감)
+                    yield return WaitBookmark(2, true);
+                    if (!_choseBack) break;
+                    yield return TurnBackToStory();
+                    yield return WaitBookmark(1, false);
+                }
+                ShowBookmark(false);
                 // 조작법 글자가 걷힘 → (게임 씬으로) 도감이 줌아웃되며 뒤로 게임 화면, 책이 덮여 아래로 내려감
                 yield return FadeGroup(_ctrlGroup, 1f, 0f, 0.45f);
                 BookToGameTransition.Create(_bookSpread);
@@ -201,10 +224,14 @@ namespace HistoryCrash.UI
         private IEnumerator TurnToControls()
         {
             // 지금 화면(인트로 마지막 장면)을 멈춰 둔 사본
-            var _snap = new RenderTexture(_rt[_front].width, _rt[_front].height, 0) { name = "IntroLastSpread" };
-            Graphics.Blit(_rt[_front], _snap);
-            _snapRT = _snap;
+            if (_snapRT == null)
+            {
+                _snapRT = new RenderTexture(_rt[_front].width, _rt[_front].height, 0) { name = "IntroLastSpread" };
+                Graphics.Blit(_rt[_front], _snapRT);
+            }
+            var _snap = _snapRT;
             _newSpread.texture = _bookSpread; _oldLeft.texture = _snap; _flipFront.texture = _snap; _flipBack.texture = _bookSpread;
+            _oldLeft.gameObject.SetActive(true); _flipFront.gameObject.SetActive(true); _oldRight.gameObject.SetActive(false);
             _ctrlGroup.alpha = 0f;
             _book.gameObject.SetActive(true);
             SetFlip(_flipFront, 1f, 1f); SetFlip(_flipBack, 0f, 1f);
@@ -222,6 +249,24 @@ namespace HistoryCrash.UI
             yield return FadeGroup(_ctrlGroup, 0f, 1f, 0.6f);
         }
 
+        /// <summary>왼쪽 페이지가 책등을 축으로 오른쪽으로 넘어가며 이야기(인트로 마지막) 펼침면으로 되돌아감</summary>
+        private IEnumerator TurnBackToStory()
+        {
+            yield return FadeGroup(_ctrlGroup, 1f, 0f, 0.3f);
+            _newSpread.texture = _snapRT;                                   // 밑: 이야기 펼침면
+            _oldRight.texture = _bookSpread; _oldRight.gameObject.SetActive(true);   // 오른쪽은 넘어온 장이 덮을 때까지 지금 페이지
+            _oldLeft.gameObject.SetActive(false);
+            _flipBack.texture = _bookSpread; _flipFront.texture = _snapRT;
+            _flipBack.gameObject.SetActive(true); _flipFront.gameObject.SetActive(false);
+            SetFlip(_flipBack, 1f, 1f); SetFlip(_flipFront, 0f, 1f);
+            var _flip = DOTween.Sequence().SetUpdate(true).SetLink(gameObject);
+            _flip.Append(DOVirtual.Float(1f, 0f, 0.425f, _k => SetFlip(_flipBack, _k, Mathf.Lerp(0.55f, 1f, _k))).SetEase(Ease.InSine));
+            _flip.AppendCallback(() => { _flipBack.gameObject.SetActive(false); _flipFront.gameObject.SetActive(true); });
+            _flip.Append(DOVirtual.Float(0f, 1f, 0.425f, _k => SetFlip(_flipFront, _k, Mathf.Lerp(0.55f, 1f, _k))).SetEase(Ease.OutSine));
+            yield return _flip.WaitForCompletion();
+            _oldRight.gameObject.SetActive(false); _flipFront.gameObject.SetActive(false); _flipBack.gameObject.SetActive(false);
+        }
+
         private static void SetFlip(RawImage _img, float _scaleX, float _shade)
         {
             _img.rectTransform.localScale = new Vector3(Mathf.Max(0.0001f, _scaleX), 1f, 1f);
@@ -237,6 +282,8 @@ namespace HistoryCrash.UI
 
             _newSpread = Raw("NewSpread", _book, new Rect(0f, 0f, 1f, 1f), new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(0.5f, 0.5f));
             _oldLeft = Raw("OldLeft", _book, new Rect(0f, 0f, 0.5f, 1f), new Vector2(0f, 0f), new Vector2(0.5f, 1f), new Vector2(0.5f, 0.5f));
+            _oldRight = Raw("OldRight", _book, new Rect(0.5f, 0f, 0.5f, 1f), new Vector2(0.5f, 0f), new Vector2(1f, 1f), new Vector2(0.5f, 0.5f));   // 되돌아 넘길 때 오른쪽 자리
+            _oldRight.gameObject.SetActive(false);
             _flipFront = Raw("FlipFront", _book, new Rect(0.5f, 0f, 0.5f, 1f), new Vector2(0.5f, 0f), new Vector2(1f, 1f), new Vector2(0f, 0.5f));   // 책등(왼쪽 끝)을 축으로
             _flipBack = Raw("FlipBack", _book, new Rect(0f, 0f, 0.5f, 1f), new Vector2(0f, 0f), new Vector2(0.5f, 1f), new Vector2(1f, 0.5f));      // 책등(오른쪽 끝)을 축으로
 
@@ -348,6 +395,118 @@ namespace HistoryCrash.UI
 
         /// <summary>클릭·키와 같은 효과(인트로 건너뛰기·책장 넘기기). 테스트나 다른 입력 연결용</summary>
         public void RequestSkip() { _skipRequested = true; }
+
+        /// <summary>우측 책갈피: 시네마틱 중이면 건너뛰기, 끝난 뒤면 다음 장/모험 시작</summary>
+        public void SkipIntro() { if (_bookmarkGroup && _bookmarkGroup.interactable) { _skipIntro = true; _bookmarkClicked = true; _choseBack = false; } }
+
+        /// <summary>좌측 책갈피: 앞 장(이야기 페이지)으로 되돌아감</summary>
+        public void GoBackPage() { if (_backGroup && _backGroup.interactable) { _bookmarkClicked = true; _choseBack = true; } }
+
+        /// <summary>우측 책갈피 글씨를 바꾸고 누를 때까지 기다림(깜빡임·번짐 같은 연출 없음). 키보드 Enter·Space·→ = 다음, ← = 이전</summary>
+        private IEnumerator WaitBookmark(int _which, bool _allowBack)
+        {
+            if (!_bookmarkGroup) yield break;
+            if (!_bookmarkGroup.gameObject.activeSelf) ShowBookmark(true);
+            ShowBack(_allowBack);
+            SetNextRibbon(_which);
+            yield return null;                                             // 누른 클릭이 다음 단계로 바로 이어지지 않게 한 프레임
+            _bookmarkClicked = false; _choseBack = false;
+            while (!_bookmarkClicked)
+            {
+                var _kb = Keyboard.current;
+                if (_kb != null && (_kb.enterKey.wasPressedThisFrame || _kb.numpadEnterKey.wasPressedThisFrame || _kb.spaceKey.wasPressedThisFrame || _kb.rightArrowKey.wasPressedThisFrame)) { _choseBack = false; break; }
+                if (_allowBack && _kb != null && _kb.leftArrowKey.wasPressedThisFrame) { _choseBack = true; break; }
+                yield return null;
+            }
+            _bookmarkClicked = false;
+            ShowBack(false);
+        }
+
+        // ================= 책갈피(우측: 건너뛰기·다음 장·모험 시작 / 좌측: 이전 장) =================
+        // 책 장면(Blender)에 비단 리본을 넣어 같은 카메라·조명으로 렌더 → 리본과 그 그림자만 오려 낸 그림을 같은 자리에 겹침.
+        // 리본은 페이지 사이에서 나와 표지 위로 늘어진 뒤 책상(지도)으로 떨어짐. 글씨도 천에 수놓인 채 함께 렌더됨
+        private static readonly Rect RIGHT_RIBBON_PX = new Rect(1725f, 235f, 195f, 143f);   // 책 그림(1920×1080) 기준 위치·크기(왼쪽 위 0,0)
+        private static readonly Rect LEFT_RIBBON_PX = new Rect(0f, 245f, 195f, 119f);
+
+        private void BuildBookmark(RectTransform _root)
+        {
+            var _box = new GameObject("Bookmarks", typeof(RectTransform), typeof(AspectRatioFitter), typeof(CanvasGroup)).GetComponent<RectTransform>();
+            _box.SetParent(_root, false); Stretch(_box);
+            var _fit = _box.GetComponent<AspectRatioFitter>(); _fit.aspectMode = AspectRatioFitter.AspectMode.EnvelopeParent; _fit.aspectRatio = 16f / 9f;
+            _bookmarkGroup = _box.GetComponent<CanvasGroup>();
+
+            CanvasGroup _unused;
+            _nextRibbon = MakeRibbon(_box, "NextRibbon", RIGHT_RIBBON_PX, SkipIntro, out _unused);
+            _backRibbon = MakeRibbon(_box, "BackRibbon", LEFT_RIBBON_PX, GoBackPage, out _backGroup);
+            _backRibbon.texture = GameLanguage.IsKorean ? _ribbonBackKo : _ribbonBackEn;
+            SetNextRibbon(0);
+            _backGroup.alpha = 0f; _backGroup.interactable = _backGroup.blocksRaycasts = false;
+
+            _bookmarkGroup.alpha = 0f; _bookmarkGroup.interactable = _bookmarkGroup.blocksRaycasts = false;
+            _box.gameObject.SetActive(false);
+        }
+
+        /// <summary>책 그림 px 영역에 리본 그림 한 장(누를 수 있음)</summary>
+        private RawImage MakeRibbon(RectTransform _box, string _name, Rect _px, System.Action _onClick, out CanvasGroup _group)
+        {
+            var _go = new GameObject(_name, typeof(RectTransform), typeof(RawImage), typeof(CanvasGroup));
+            _go.transform.SetParent(_box, false);
+            var _r = (RectTransform)_go.transform;
+            _r.anchorMin = new Vector2(_px.xMin / 1920f, 1f - _px.yMax / 1080f); _r.anchorMax = new Vector2(_px.xMax / 1920f, 1f - _px.yMin / 1080f);
+            _r.offsetMin = _r.offsetMax = Vector2.zero;
+            var _img = _go.GetComponent<RawImage>(); _img.raycastTarget = true;
+            _group = _go.GetComponent<CanvasGroup>();
+            var _bm = _go.AddComponent<MainMenuBookmark>(); _bm.Clicked = _onClick;
+            return _img;
+        }
+
+        /// <summary>우측 리본 그림을 바꿈: 0 건너뛰기, 1 다음 장, 2 모험 시작(설정 언어에 맞춰)</summary>
+        private void SetNextRibbon(int _which)
+        {
+            DOTween.Kill(_nextRibbon);   // 내려앉는 중에 글씨가 바뀌면 프레임 재생을 멈추고 바로 새 그림
+            var _set = GameLanguage.IsKorean ? _ribbonNextKo : _ribbonNextEn;
+            if (_set != null && _which >= 0 && _which < _set.Length && _set[_which]) _nextRibbon.texture = _set[_which];
+        }
+
+        private void ShowBookmark(bool _on)
+        {
+            if (!_bookmarkGroup) return;
+            _bookmarkGroup.DOKill();
+            _bookmarkGroup.interactable = _bookmarkGroup.blocksRaycasts = _on;
+            if (_on)
+            {
+                // 잠시 뒤 리본이 책 사이에서 걸쳐지듯 놓임: 들린 모양으로 나타나 표지·책상 위로 내려앉음
+                _bookmarkGroup.gameObject.SetActive(true); _bookmarkGroup.alpha = 0f;
+                DOVirtual.DelayedCall(0.6f, () =>
+                {
+                    _bookmarkGroup.DOFade(1f, 0.12f).SetUpdate(true).SetLink(_bookmarkGroup.gameObject);
+                    PlayDrape(_nextRibbon, GameLanguage.IsKorean ? _ribbonSkipKoDrape : _ribbonSkipEnDrape, _nextRibbon.texture);
+                }).SetUpdate(true).SetLink(_bookmarkGroup.gameObject);
+            }
+            else _bookmarkGroup.DOFade(0f, 0.25f).SetUpdate(true).SetLink(_bookmarkGroup.gameObject).OnComplete(() => _bookmarkGroup.gameObject.SetActive(false));
+        }
+
+        private void ShowBack(bool _on)
+        {
+            if (!_backGroup) return;
+            bool _was = _backGroup.alpha > 0.5f;
+            _backGroup.interactable = _backGroup.blocksRaycasts = _on;
+            _backGroup.alpha = _on ? 1f : 0f;
+            // 새로 나타날 때만 걸쳐지듯 내려앉음(사라질 때는 그냥 사라짐)
+            if (_on && !_was) PlayDrape(_backRibbon, GameLanguage.IsKorean ? _ribbonBackKoDrape : _ribbonBackEnDrape, GameLanguage.IsKorean ? _ribbonBackKo : _ribbonBackEn);
+        }
+
+        /// <summary>Blender에서 렌더한 내려앉는 프레임을 차례로 보여 주고 마지막에 정지 그림으로(천천히 가라앉는 곡선은 렌더에 들어 있음)</summary>
+        private void PlayDrape(RawImage _img, Texture2D[] _frames, Texture _still)
+        {
+            if (!_img) return;
+            DOTween.Kill(_img);
+            if (_frames == null || _frames.Length == 0) { _img.texture = _still; return; }
+            _img.texture = _frames[0];
+            DOVirtual.Float(0f, _frames.Length, _drapeTime, _v => { int _i = Mathf.Min(_frames.Length - 1, (int)_v); if (_frames[_i]) _img.texture = _frames[_i]; })
+                .SetEase(Ease.Linear).SetUpdate(true).SetId(_img).SetLink(_img.gameObject)
+                .OnComplete(() => _img.texture = _still);
+        }
 
         public void Select(int _i)
         {
@@ -474,6 +633,7 @@ namespace HistoryCrash.UI
 
             // 인트로 뒤 책장 넘김·조작법 페이지(영상 위, 검은 막 아래)
             BuildBookPages(_root);
+            BuildBookmark(_root);
 
             // 검은 막(시작·씬 전환 페이드)
             var _b = new GameObject("Black", typeof(RectTransform), typeof(Image));

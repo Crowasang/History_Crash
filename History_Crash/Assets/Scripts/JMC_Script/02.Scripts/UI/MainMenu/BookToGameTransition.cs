@@ -66,6 +66,9 @@ namespace HistoryCrash.UI
             for (int i = 0; i < 3; i++) yield return null;               // 게임 씬 첫 장면이 자리 잡도록
             float _prevScale = Time.timeScale > 0f ? Time.timeScale : 1f;
             Time.timeScale = 0f;                                          // 책이 내려갈 때까지 게임은 멈춤(설정창 닫힘과 같음)
+            // 팀의 일시정지 입력(Esc → GameManager.Pause)도 전환이 끝날 때까지 꺼 둠(켜 두면 연출 중에 설정창이 열림)
+            var _pauseInputs = FindObjectsByType<PauseInputHandler>(FindObjectsSortMode.None);
+            foreach (var _h in _pauseInputs) _h.enabled = false;
 
             // 연출은 DOTween 시퀀스(게임 시간이 멈춰 있으므로 SetUpdate(true))
             var _dimC = new Color(0.03f, 0.035f, 0.02f, DIM);
@@ -100,6 +103,7 @@ namespace HistoryCrash.UI
             Time.timeScale = _prevScale;
             Cursor.lockState = CursorLockMode.Locked; Cursor.visible = false;
             PauseSettingsUI.InputBlocked = false;    // 책이 다 내려간 이 순간부터 플레이어 조작 가능
+            foreach (var _h in _pauseInputs) if (_h) _h.enabled = true;
             Destroy(gameObject);
         }
 
