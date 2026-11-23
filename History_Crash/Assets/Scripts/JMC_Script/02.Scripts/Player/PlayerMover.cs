@@ -73,6 +73,7 @@ namespace HistoryCrash.Player
 
         private void Update()
         {
+            if (HistoryCrash.UI.PauseSettingsUI.IsOpen) return;   // 멈춘 동안 점프 입력이 쌓이지 않게
             if (IsFalling) { UpdateFall(); return; }
             var _kb = Keyboard.current;
             if (_kb == null) return;
