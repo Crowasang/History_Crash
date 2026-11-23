@@ -67,6 +67,12 @@ public class GameManager : MonoBehaviour, IGameFlow, IPauseControl
     /// <summary>일시정지 중인지. 구독하면 바뀔 때마다 알림을 받습니다.</summary>
     public ReadOnlyReactiveProperty<bool> IsPaused => _isPaused;
 
+    /// <summary>플레이어 체력. 다른 스크립트의 Start보다 먼저 쓰일 수 있어서 처음 읽을 때 연결함</summary>
+    public IHealthReadOnly PlayerHealth => InterfaceRef.Resolve<IHealthReadOnly>(_playerHealth, this, nameof(_playerHealth));
+
+    /// <summary>보스(파라오) 체력</summary>
+    public IHealthReadOnly BossHealth => InterfaceRef.Resolve<IHealthReadOnly>(_bossHealth, this, nameof(_bossHealth));
+
     /// <summary>준비·진행 상태에서만 일시정지할 수 있음</summary>
     public bool CanPause => _currentState.Value == GameStateType.Ready || _currentState.Value == GameStateType.Playing;
 
