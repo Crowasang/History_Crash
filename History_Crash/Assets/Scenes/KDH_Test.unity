@@ -4219,6 +4219,7 @@ GameObject:
   - component: {fileID: 650339049}
   - component: {fileID: 650339048}
   - component: {fileID: 650339051}
+  - component: {fileID: 650339052}
   m_Layer: 0
   m_Name: GameManager
   m_TagString: Untagged
@@ -4292,6 +4293,21 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PauseInputHandler
   _pauseAction: {fileID: -8338598726356848359, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   _pauseControlSource: {fileID: 650339049}
+--- !u!114 &650339052
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 650339047}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a946478295f11a8439d0165c12fa9c80, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ActiveOnlyWhilePlaying
+  _gameFlowSource: {fileID: 650339049}
+  _targets:
+  - {fileID: 1965269505}
 --- !u!65 &653292496
 BoxCollider:
   m_ObjectHideFlags: 0
