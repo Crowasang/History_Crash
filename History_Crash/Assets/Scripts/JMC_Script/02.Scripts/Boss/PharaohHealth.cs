@@ -34,6 +34,7 @@ namespace HistoryCrash.Boss
 
         private void OnGUI()
         {
+            if (HistoryCrash.UI.PauseSettingsUI.IsOpen) return;   // 설정창이 열리면 OnGUI 글자는 그리지 않음(항상 UI 위에 그려지므로)
             if (!_debugBar) return;
             float _w = Mathf.Min(520, Screen.width * 0.5f), _h = 18, _x = (Screen.width - _w) / 2, _y = 14;
             var _title = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold };

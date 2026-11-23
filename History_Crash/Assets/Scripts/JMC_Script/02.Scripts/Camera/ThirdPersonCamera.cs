@@ -49,6 +49,11 @@ namespace HistoryCrash.CameraRig
         [SerializeField, FormerlySerializedAs("collisionPadding")] private float _collisionPadding = 0.1f;
         [SerializeField, FormerlySerializedAs("minHeightAboveFloor")] private float _minHeightAboveFloor = 0.25f;
 
+        /// <summary>마우스 감도(설정창에서 바꿈)</summary>
+        public float MouseSensitivity { get => _mouseSensitivity; set => _mouseSensitivity = Mathf.Max(0.001f, value); }
+        /// <summary>마우스 상하 반전(설정창에서 바꿈)</summary>
+        public bool InvertY { get; set; }
+
         private float _yaw, _yawVel, _distVel, _targetDistance, _currentDistance;
         private Vector3 _pivotVel, _smoothedPivot;
         private bool _overview;
@@ -100,11 +105,11 @@ namespace HistoryCrash.CameraRig
 
         private void Update()
         {
+            if (HistoryCrash.UI.PauseSettingsUI.IsOpen) return;   // 설정창이 열려 있으면 시점 입력을 받지 않음(ESC도 설정창이 씀)
             var _kb = Keyboard.current; var _mouse = Mouse.current;
             bool _cursorLocked = Cursor.lockState == CursorLockMode.Locked;
             if (_kb != null)
             {
-                if (_kb.escapeKey.wasPressedThisFrame) LockCursor(false);
                 if (_kb.tabKey.wasPressedThisFrame) _lockOn = !_lockOn;
                 if (_kb.vKey.wasPressedThisFrame) _overview = !_overview;
                 if (_kb.rKey.wasPressedThisFrame && _target && _lockTarget) { _lockOn = false; _yaw = YawToward(_lockTarget.position); }
@@ -122,7 +127,7 @@ namespace HistoryCrash.CameraRig
                     {
                         if (Mathf.Abs(_d.x) > 0.5f) _lockOn = false;   // 마우스로 돌리면 락온 해제
                         _yaw += _d.x * _mouseSensitivity;
-                        _pitch = Mathf.Clamp(_pitch - _d.y * _mouseSensitivity, _minPitch, _maxPitch);
+                        _pitch = Mathf.Clamp(_pitch - _d.y * _mouseSensitivity * (InvertY ? -1f : 1f), _minPitch, _maxPitch);
                     }
                 }
                 float _scroll = _mouse.scroll.ReadValue().y;

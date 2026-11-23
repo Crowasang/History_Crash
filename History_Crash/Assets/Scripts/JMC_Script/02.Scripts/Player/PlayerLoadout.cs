@@ -48,6 +48,7 @@ namespace HistoryCrash.Player
 
         private void Update()
         {
+            if (HistoryCrash.UI.PauseSettingsUI.IsOpen) return;   // 설정창을 누르는 클릭이 공격·줍기로 새지 않게
             var _kb = Keyboard.current;
             if (_kb != null && _kb.eKey.wasPressedThisFrame) TryPickup();
             var _ms = Mouse.current;
@@ -262,12 +263,17 @@ namespace HistoryCrash.Player
 
         private void OnGUI()
         {
+            if (HistoryCrash.UI.PauseSettingsUI.IsOpen) return;   // 설정창이 열리면 OnGUI 글자는 그리지 않음(항상 UI 위에 그려지므로)
             var _it = FindPickable();
             if (_it)
             {
                 var _style = new GUIStyle(GUI.skin.label) { fontSize = 18, alignment = TextAnchor.MiddleCenter };
-                string _what = _it.Kind == PickupKind.Staff ? "스태프 " + _staffNames[_it.Value] : ElementInfo.NameKo(_it.ElementValue) + " 오브";
-                GUI.Label(new Rect(Screen.width / 2 - 140, Screen.height * 0.62f, 280, 30), "[E] " + _what + " 줍기", _style);
+                // 설정창 Language에 따라 한국어/영어
+                string _what = _it.Kind == PickupKind.Staff
+                    ? HistoryCrash.UI.GameLanguage.T("스태프 " + _staffNames[_it.Value], "Staff " + _staffNames[_it.Value])
+                    : HistoryCrash.UI.GameLanguage.T(ElementInfo.NameKo(_it.ElementValue) + " 오브", ElementInfo.Name(_it.ElementValue) + " Orb");
+                string _msg = HistoryCrash.UI.GameLanguage.T("[E] " + _what + " 줍기", "[E] Pick up " + _what);
+                GUI.Label(new Rect(Screen.width / 2 - 160, Screen.height * 0.62f, 320, 30), _msg, _style);
             }
             string _staff = HeldStaff >= 0 ? _staffNames[HeldStaff] : "-";
             string _orb = HasOrb ? ElementInfo.NameKo(HeldOrb) : "-";
