@@ -13,16 +13,25 @@ public class SceneChangeButton : MonoBehaviour
 {
     [Tooltip("이동할 씬 이름. 비우면 현재 씬을 다시 불러옴 (재시작)")]
     [SerializeField] private string _targetSceneName;
-    [Tooltip("ISceneLoader를 구현한 컴포넌트 (SceneLoader). 비우면 페이드 없이 바로 전환")]
+    [Tooltip("ISceneLoader를 구현한 컴포넌트 (SceneLoader). 비우거나 사라졌으면 씬이 바뀌어도 유지되는 SceneLoader를 씀, 그것도 없으면 페이드 없이 바로 전환")]
     [SerializeField] private MonoBehaviour _sceneLoaderSource;
 
     private Button _button;
-    private ISceneLoader _sceneLoader;
 
     private void Awake()
     {
         _button = GetComponent<Button>();
-        _sceneLoader = InterfaceRef.Resolve<ISceneLoader>(_sceneLoaderSource, this, nameof(_sceneLoaderSource));
+    }
+
+    // 누를 때 찾음: 메인 메뉴에서 넘어오면 이 씬의 SceneLoader는 중복이라 사라지고, 씬이 바뀌어도 유지되는 것(Instance)만 남기 때문
+    private ISceneLoader ResolveLoader()
+    {
+        if (_sceneLoaderSource != null)   // 사라진 컴포넌트는 Unity에서 null로 취급됨
+        {
+            return InterfaceRef.Resolve<ISceneLoader>(_sceneLoaderSource, this, nameof(_sceneLoaderSource));
+        }
+
+        return SceneLoader.Instance;
     }
 
     private void OnEnable()
@@ -39,6 +48,7 @@ public class SceneChangeButton : MonoBehaviour
     {
         bool _isReload = string.IsNullOrEmpty(_targetSceneName);
 
+        ISceneLoader _sceneLoader = ResolveLoader();
         if (_sceneLoader != null)
         {
             if (_isReload) _sceneLoader.ReloadCurrent();
