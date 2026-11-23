@@ -4246,7 +4246,7 @@ MonoBehaviour:
   _pillarNamePrefix: Zedtop
   _tileSize: 0.975
   _pillarSearchRadius: 5
-  _autoForceMove: 1
+  _autoForceMove: 0
   _autoForceMoveInterval: 10
 --- !u!114 &650339049
 MonoBehaviour:
@@ -41122,6 +41122,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 7443134760478758419, guid: 37ada1e3a72fdcd4ca551c4b246294b6, type: 3}
       insertIndex: -1
       addedObject: {fileID: 2102868731}
+    - targetCorrespondingSourceObject: {fileID: 7443134760478758419, guid: 37ada1e3a72fdcd4ca551c4b246294b6, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 2102868733}
   m_SourcePrefab: {fileID: 100100000, guid: 37ada1e3a72fdcd4ca551c4b246294b6, type: 3}
 --- !u!1 &2102868729 stripped
 GameObject:
@@ -41152,6 +41155,21 @@ Animator:
   m_CorrespondingSourceObject: {fileID: 5056979440595615552, guid: 37ada1e3a72fdcd4ca551c4b246294b6, type: 3}
   m_PrefabInstance: {fileID: 2102868728}
   m_PrefabAsset: {fileID: 0}
+--- !u!114 &2102868733
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2102868729}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6656581a9a80d064d99aa156c445df51, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DisableOnGameEnd
+  _gameFlowSource: {fileID: 650339049}
+  _targets:
+  - {fileID: 2102868732}
 --- !u!65 &2103033617
 BoxCollider:
   m_ObjectHideFlags: 0
