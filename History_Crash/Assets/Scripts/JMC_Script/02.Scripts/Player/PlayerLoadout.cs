@@ -46,7 +46,8 @@ namespace HistoryCrash.Player
         {
             _rb = GetComponent<Rigidbody>();
             _speed = GetComponent<ISpeedModifier>();
-            if (!_grid) _grid = FindFirstObjectByType<TileGrid>();
+            // 타일 격자가 붙은 패턴 오브젝트는 게임 진행 전에는 꺼져 있으므로(ActiveOnlyWhilePlaying) 꺼진 것도 찾음
+            if (!_grid) _grid = FindFirstObjectByType<TileGrid>(FindObjectsInactive.Include);
             if (!_animator) _animator = GetComponentInChildren<Animator>();
             if (!_model && _animator) _model = _animator.transform;
             if (Camera.main) _camera = Camera.main.transform;
@@ -68,6 +69,7 @@ namespace HistoryCrash.Player
 
         public PickupItem FindPickable()
         {
+            if (_grid == null) _grid = FindFirstObjectByType<TileGrid>(FindObjectsInactive.Include);
             if (_grid == null) return null;
             var _pc = _grid.WorldToCell(transform.position);
             PickupItem _best = null; float _bestD = float.MaxValue;
