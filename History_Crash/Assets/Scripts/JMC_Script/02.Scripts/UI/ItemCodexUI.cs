@@ -1,4 +1,4 @@
-using System.Collections;
+using DG.Tweening;
 using UnityEngine;
 using UnityEngine.UI;
 using HistoryCrash.Data;
@@ -41,11 +41,16 @@ namespace HistoryCrash.UI
 
         private class Page
         {
-            public RectTransform Slot, Mask; public RawImage Art, Title; public string Key; public Coroutine Running;
+            public RectTransform Slot, Mask; public RawImage Art, Title; public string Key; public Sequence Running;
         }
         private Page _left, _right;
         private RectTransform _root;
         private int _lastStaff = int.MinValue; private bool _lastHasOrb; private Element _lastOrb;
+
+        // 메인메뉴 → 게임 씬처럼 씬이 바뀌어도 다시 만들어지게(AfterSceneLoad는 플레이를 시작할 때 한 번만 불림)
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void HookSceneLoaded() { UnityEngine.SceneManagement.SceneManager.sceneLoaded -= OnSceneLoadedAutoCreate; UnityEngine.SceneManagement.SceneManager.sceneLoaded += OnSceneLoadedAutoCreate; }
+        private static void OnSceneLoadedAutoCreate(UnityEngine.SceneManagement.Scene _s, UnityEngine.SceneManagement.LoadSceneMode _m) { AutoCreate(); }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void AutoCreate()
@@ -134,54 +139,46 @@ namespace HistoryCrash.UI
         private void Show(Page _p, string _key)
         {
             if (_key == _p.Key) return;
-            if (_p.Running != null) StopCoroutine(_p.Running);
-            _p.Running = StartCoroutine(Change(_p, _key));
-        }
-
-        private IEnumerator Change(Page _p, string _key)
-        {
-            // 1) 이전 그림·이름이 번지며 지워짐
+            _p.Running?.Kill();
+            _p.Slot.localScale = Vector3.one; _p.Slot.localRotation = Quaternion.identity;
+            // 1) 이전 그림·이름이 번지며 지워짐 → 끝나면 2) 새 그림
+            var _seq = DOTween.Sequence().SetUpdate(true).SetLink(gameObject);
             if (_p.Slot.gameObject.activeSelf)
             {
-                for (float _t = 0f; _t < _eraseTime; _t += Time.unscaledDeltaTime)
-                {
-                    float _u = _t / _eraseTime;
-                    _p.Art.color = new Color(1f, 1f, 1f, 1f - _u); _p.Title.color = new Color(1f, 1f, 1f, 1f - _u);
-                    _p.Slot.localScale = Vector3.one * (1f + 0.06f * _u);
-                    yield return null;
-                }
+                _seq.Insert(0f, _p.Art.DOFade(0f, _eraseTime).SetEase(Ease.Linear));
+                _seq.Insert(0f, _p.Title.DOFade(0f, _eraseTime).SetEase(Ease.Linear));
+                _seq.Insert(0f, _p.Slot.DOScale(1.06f, _eraseTime).SetEase(Ease.Linear));
             }
+            _seq.OnComplete(() => Draw(_p, _key));
+            _p.Running = _seq;
+        }
+
+        private void Draw(Page _p, string _key)
+        {
             _p.Slot.localScale = Vector3.one; _p.Key = _key;
             _p.Slot.gameObject.SetActive(false); _p.Title.gameObject.SetActive(false);
-            if (string.IsNullOrEmpty(_key)) { _p.Running = null; yield break; }
+            _p.Running = null;
+            if (string.IsNullOrEmpty(_key)) return;
             var _art = Resources.Load<Texture2D>(TEX + "UI_Codex_" + _key);
             var _title = Resources.Load<Texture2D>(TEX + "UI_Codex_Title_" + _key);
-            if (!_art) { _p.Running = null; yield break; }
+            if (!_art) return;
 
             // 2) 새 삽화가 왼쪽→오른쪽으로 그려짐(펜 속도: 처음 빠르고 끝에서 느림, 살짝 떨림)
             Vector2 _size = new Vector2(_art.width, _art.height) * Scale;
             _p.Slot.sizeDelta = _size; _p.Art.rectTransform.sizeDelta = _size; _p.Art.texture = _art; _p.Art.color = Color.white;
-            _p.Mask.sizeDelta = new Vector2(0f, 0f); _p.Slot.gameObject.SetActive(true);
-            for (float _t = 0f; _t < _drawTime; _t += Time.unscaledDeltaTime)
-            {
-                float _u = _t / _drawTime, _e = 1f - (1f - _u) * (1f - _u);
-                _p.Mask.sizeDelta = new Vector2(_size.x * _e, 0f);
-                _p.Slot.localRotation = Quaternion.Euler(0f, 0f, Mathf.Sin(_u * Mathf.PI * 3f) * 1.0f * (1f - _u));
-                yield return null;
-            }
-            _p.Mask.sizeDelta = new Vector2(_size.x, 0f); _p.Slot.localRotation = Quaternion.identity;
-
+            _p.Mask.sizeDelta = Vector2.zero; _p.Slot.gameObject.SetActive(true);
+            var _seq = DOTween.Sequence().SetUpdate(true).SetLink(gameObject);
+            _seq.Insert(0f, DOTween.To(() => _p.Mask.sizeDelta.x, w => _p.Mask.sizeDelta = new Vector2(w, 0f), _size.x, _drawTime).SetEase(Ease.OutQuad));
+            _seq.Insert(0f, DOVirtual.Float(0f, 1f, _drawTime, u => _p.Slot.localRotation = Quaternion.Euler(0f, 0f, Mathf.Sin(u * Mathf.PI * 3f) * 1.0f * (1f - u))).SetEase(Ease.Linear));
+            _seq.AppendCallback(() => _p.Slot.localRotation = Quaternion.identity);
             // 3) 이름이 스며듦
             if (_title)
             {
-                _p.Title.texture = _title; _p.Title.color = new Color(1f, 1f, 1f, 0f); _p.Title.gameObject.SetActive(true);
-                for (float _t = 0f; _t < _titleTime; _t += Time.unscaledDeltaTime)
-                {
-                    _p.Title.color = new Color(1f, 1f, 1f, Mathf.SmoothStep(0f, 1f, _t / _titleTime)); yield return null;
-                }
-                _p.Title.color = Color.white;
+                _seq.AppendCallback(() => { _p.Title.texture = _title; _p.Title.color = new Color(1f, 1f, 1f, 0f); _p.Title.gameObject.SetActive(true); });
+                _seq.Append(_p.Title.DOFade(1f, _titleTime).SetEase(Ease.InOutSine));
             }
-            _p.Running = null;
+            _seq.OnComplete(() => _p.Running = null);
+            _p.Running = _seq;
         }
     }
 }

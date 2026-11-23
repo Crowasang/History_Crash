@@ -1,4 +1,4 @@
-using System.Collections;
+using DG.Tweening;
 using UnityEngine;
 using UnityEngine.UI;
 using HistoryCrash.Player;
@@ -18,6 +18,8 @@ namespace HistoryCrash.UI
 
         // 플레이어 체력 (KDH 코어: GameManager.PlayerHealth = 플레이어의 Health)
         private IHealthReadOnly _health;
+        // GameManager가 없는 씬(TEST_JMC 등)은 예전 JMC 체력으로
+        private PlayerHealth _legacy;
 
         [Header("배치(기준 해상도 1920×1080)")]
         [SerializeField] private float _size = 330f;
@@ -32,20 +34,27 @@ namespace HistoryCrash.UI
         private RawImage _base, _over;
         private RectTransform _root;
         private int _shown = -1;
-        private Coroutine _running;
+        private Sequence _running;
+
+        // 메인메뉴 → 게임 씬처럼 씬이 바뀌어도 다시 만들어지게(AfterSceneLoad는 플레이를 시작할 때 한 번만 불림)
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void HookSceneLoaded() { UnityEngine.SceneManagement.SceneManager.sceneLoaded -= OnSceneLoadedAutoCreate; UnityEngine.SceneManagement.SceneManager.sceneLoaded += OnSceneLoadedAutoCreate; }
+        private static void OnSceneLoadedAutoCreate(UnityEngine.SceneManagement.Scene _s, UnityEngine.SceneManagement.LoadSceneMode _m) { AutoCreate(); }
 
         // 씬이 열리면 플레이어 체력이 연결된 경우에만 HP UI를 하나 만든다(씬 저장 없이 동작)
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void AutoCreate()
         {
             if (FindFirstObjectByType<PlayerHPCompassUI>()) return;
-            if (GameManager.Instance == null || GameManager.Instance.PlayerHealth == null) return;
+            bool _core = GameManager.Instance != null && GameManager.Instance.PlayerHealth != null;
+            if (!_core && !FindFirstObjectByType<PlayerHealth>()) return;
             new GameObject("UI_PlayerHPCompass").AddComponent<PlayerHPCompassUI>();
         }
 
         private void Awake()
         {
             _health = GameManager.Instance != null ? GameManager.Instance.PlayerHealth : null;
+            if (_health == null) _legacy = FindFirstObjectByType<PlayerHealth>();
             for (int _i = 0; _i <= MAX_STATE; _i++) _states[_i] = Resources.Load<Texture2D>(TEX_PATH + _i);
             Build();
         }
@@ -82,35 +91,27 @@ namespace HistoryCrash.UI
 
         private void Update()
         {
-            if (_health == null) return;
-            int _hp = Mathf.Clamp(_health.CurrentHp.CurrentValue, 0, MAX_STATE);
+            if (_health == null && !_legacy) return;
+            int _hp = Mathf.Clamp(_health != null ? _health.CurrentHp.CurrentValue : _legacy.HP, 0, MAX_STATE);
             if (_hp == _shown) return;
             if (_shown < 0) { _base.texture = _states[_hp]; _shown = _hp; return; }   // 처음엔 연출 없이
             bool _hurt = _hp < _shown;
             _shown = _hp;
-            if (_running != null) StopCoroutine(_running);
-            _running = StartCoroutine(Change(_states[_hp], _hurt));
+            _running?.Kill();
+            _running = Change(_states[_hp], _hurt);
         }
 
-        // 새 상태를 위에 겹쳐 서서히 드러낸 뒤 아래 이미지와 바꿈. 맞았으면 흔들림
-        private IEnumerator Change(Texture2D _next, bool _hurt)
+        // 새 상태를 위에 겹쳐 서서히 드러낸 뒤 아래 이미지와 바꿈. 맞았으면 흔들림(DOTween, 게임이 멈춰도 흐르는 시간)
+        private Sequence Change(Texture2D _next, bool _hurt)
         {
-            _over.texture = _next;
-            for (float _t = 0f; _t < Mathf.Max(_fadeTime, _shakeTime); _t += Time.unscaledDeltaTime)
-            {
-                _over.color = new Color(1f, 1f, 1f, Mathf.Clamp01(_t / Mathf.Max(0.01f, _fadeTime)));
-                if (_hurt && _t < _shakeTime)
-                {
-                    float _k = 1f - _t / _shakeTime;
-                    _root.anchoredPosition = _offset + new Vector2(Mathf.Sin(_t * 90f), Mathf.Cos(_t * 70f)) * _shakeAmp * _k;
-                }
-                else _root.anchoredPosition = _offset;
-                yield return null;
-            }
-            _base.texture = _next;
-            _over.color = new Color(1f, 1f, 1f, 0f);
             _root.anchoredPosition = _offset;
-            _running = null;
+            _over.texture = _next; _over.color = new Color(1f, 1f, 1f, 0f);
+            var _seq = DOTween.Sequence().SetUpdate(true).SetLink(gameObject);
+            _seq.Insert(0f, _over.DOFade(1f, Mathf.Max(0.01f, _fadeTime)).SetEase(Ease.Linear));
+            if (_hurt) _seq.Insert(0f, _root.DOShakeAnchorPos(_shakeTime, _shakeAmp, 30, 90f, false, true));
+            _seq.OnComplete(() => { _base.texture = _next; _over.color = new Color(1f, 1f, 1f, 0f); _root.anchoredPosition = _offset; });
+            _seq.OnKill(() => { if (_root) _root.anchoredPosition = _offset; });
+            return _seq;
         }
     }
 }

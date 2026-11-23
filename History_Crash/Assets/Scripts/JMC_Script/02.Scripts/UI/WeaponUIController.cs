@@ -1,4 +1,4 @@
-using System.Collections;
+using DG.Tweening;
 using UnityEngine;
 using UnityEngine.Serialization;
 using UnityEngine.UI;
@@ -87,96 +87,76 @@ namespace HistoryCrash.UI
             if (_s.Icon == null) return;
             if (_data != null && _data == _s.Current) return;
             var _prev = _s.Current; _s.Current = _data;
-            if (_s.Running != null) StopCoroutine(_s.Running);
+            _s.Running?.Kill();
             _s.Root.localRotation = Quaternion.identity; _s.Root.localScale = Vector3.one;
-            _s.Running = StartCoroutine(_style == WeaponUIStyle.InkDraw ? InkDraw(_s, _prev, _data) : Flip(_s, _data));
+            _s.Running = _style == WeaponUIStyle.InkDraw ? InkDraw(_s, _prev, _data) : Flip(_s, _data);
         }
 
-        // ---------- 양피지 잉크 그리기 ----------
-        private IEnumerator InkDraw(WeaponUISlot _s, WeaponData _prev, WeaponData _data)
+        // ---------- 양피지 잉크 그리기(DOTween, 게임이 멈춰도 흐르는 시간) ----------
+        private Sequence InkDraw(WeaponUISlot _s, WeaponData _prev, WeaponData _data)
         {
+            var _seq = DOTween.Sequence().SetUpdate(true).SetLink(gameObject);
             // 1) 이전 그림이 번지며 지워짐(살짝 커지며 흐려짐)
             if (_s.Icon.enabled)
             {
-                Color _ic = _s.Icon.color, _kc = _s.Ink ? _s.Ink.color : Color.clear;
-                for (float _t = 0; _t < _eraseTime; _t += Time.unscaledDeltaTime)
-                {
-                    float _u = _t / _eraseTime;
-                    _s.Icon.color = new Color(_ic.r, _ic.g, _ic.b, _ic.a * (1f - _u));
-                    if (_s.Ink) _s.Ink.color = new Color(_kc.r, _kc.g, _kc.b, _kc.a * (1f - _u));
-                    if (_s.Caption) _s.Caption.color = new Color(_s.Caption.color.r, _s.Caption.color.g, _s.Caption.color.b, 1f - _u);
-                    _s.Root.localScale = Vector3.one * (1f + 0.08f * _u);
-                    yield return null;
-                }
+                _seq.Insert(0f, _s.Icon.DOFade(0f, _eraseTime).SetEase(Ease.Linear));
+                if (_s.Ink) _seq.Insert(0f, _s.Ink.DOFade(0f, _eraseTime).SetEase(Ease.Linear));
+                if (_s.Caption) _seq.Insert(0f, _s.Caption.DOFade(0f, _eraseTime).SetEase(Ease.Linear));
+                _seq.Insert(0f, _s.Root.DOScale(1.08f, _eraseTime).SetEase(Ease.Linear));
             }
-            _s.Root.localScale = Vector3.one;
-            _s.Icon.enabled = false; if (_s.Ink) _s.Ink.enabled = false;
-            if (_s.Caption) _s.Caption.text = "";
-            if (!_data || !_data.WeaponIcon) { _s.Running = null; yield break; }
+            _seq.AppendCallback(() =>
+            {
+                _s.Root.localScale = Vector3.one;
+                _s.Icon.enabled = false; if (_s.Ink) _s.Ink.enabled = false;
+                if (_s.Caption) _s.Caption.text = "";
+            });
+            if (!_data || !_data.WeaponIcon) return _seq;
 
-            // 2) 잉크 윤곽이 왼쪽→오른쪽으로 그려짐(펜 속도: 처음 빠르고 끝에서 느려짐)
-            _s.Icon.sprite = _data.WeaponIcon;
+            // 2) 잉크 윤곽이 왼쪽→오른쪽으로 그려짐(펜 속도: 처음 빠르고 끝에서 느려짐) + 펜 떨림
             if (_s.Ink)
             {
-                _s.Ink.sprite = _data.WeaponIcon; _s.Ink.enabled = true; _s.Ink.color = _inkColor; _s.Ink.fillAmount = 0f;
-                for (float _t = 0; _t < _inkTime; _t += Time.unscaledDeltaTime)
-                {
-                    float _u = _t / _inkTime;
-                    _s.Ink.fillAmount = 1f - (1f - _u) * (1f - _u);
-                    _s.Root.localRotation = Quaternion.Euler(0, 0, Mathf.Sin(_u * Mathf.PI * 3f) * 1.2f * (1f - _u));   // 펜 떨림
-                    yield return null;
-                }
-                _s.Ink.fillAmount = 1f; _s.Root.localRotation = Quaternion.identity;
+                _seq.AppendCallback(() => { _s.Icon.sprite = _data.WeaponIcon; _s.Ink.sprite = _data.WeaponIcon; _s.Ink.enabled = true; _s.Ink.color = _inkColor; _s.Ink.fillAmount = 0f; });
+                float _at = _seq.Duration(false);
+                _seq.Insert(_at, _s.Ink.DOFillAmount(1f, _inkTime).SetEase(Ease.OutQuad));
+                _seq.Insert(_at, DOVirtual.Float(0f, 1f, _inkTime, u => _s.Root.localRotation = Quaternion.Euler(0, 0, Mathf.Sin(u * Mathf.PI * 3f) * 1.2f * (1f - u))).SetEase(Ease.Linear));
+                _seq.AppendCallback(() => _s.Root.localRotation = Quaternion.identity);
             }
+            else _seq.AppendCallback(() => _s.Icon.sprite = _data.WeaponIcon);
 
             // 3) 채색이 스며듦 + 이름 글씨
-            _s.Icon.enabled = true;
-            if (_s.Caption) { _s.Caption.text = _data.DisplayName; }
-            for (float _t = 0; _t < _paintTime; _t += Time.unscaledDeltaTime)
+            _seq.AppendCallback(() =>
             {
-                float _u = Mathf.SmoothStep(0f, 1f, _t / _paintTime);
-                _s.Icon.color = new Color(_paintTint.r, _paintTint.g, _paintTint.b, _paintTint.a * _u);
-                if (_s.Ink) _s.Ink.color = new Color(_inkColor.r, _inkColor.g, _inkColor.b, Mathf.Lerp(_inkColor.a, _inkRemain, _u));
-                if (_s.Caption) _s.Caption.color = new Color(_s.Caption.color.r, _s.Caption.color.g, _s.Caption.color.b, _u);
-                yield return null;
-            }
-            _s.Icon.color = _paintTint;
-            if (_s.Ink) _s.Ink.color = new Color(_inkColor.r, _inkColor.g, _inkColor.b, _inkRemain);
-            _s.Running = null;
+                _s.Icon.enabled = true; _s.Icon.color = new Color(_paintTint.r, _paintTint.g, _paintTint.b, 0f);
+                if (_s.Caption) { _s.Caption.text = _data.DisplayName; var _c = _s.Caption.color; _c.a = 0f; _s.Caption.color = _c; }
+            });
+            float _p0 = _seq.Duration(false);
+            _seq.Insert(_p0, _s.Icon.DOFade(_paintTint.a, _paintTime).SetEase(Ease.InOutSine));
+            if (_s.Ink) _seq.Insert(_p0, _s.Ink.DOFade(_inkRemain, _paintTime).SetEase(Ease.InOutSine));
+            if (_s.Caption) _seq.Insert(_p0, _s.Caption.DOFade(1f, _paintTime).SetEase(Ease.InOutSine));
+            return _seq;
         }
 
         // ---------- 동전 뒤집기(이전 연출) ----------
-        private IEnumerator Flip(WeaponUISlot _s, WeaponData _data)
+        private Sequence Flip(WeaponUISlot _s, WeaponData _data)
         {
             Color _sig = _data ? _data.SignatureColor : Color.white;
             float _quarter = _flipTime * 0.25f, _rest = _flipTime - _quarter;
-            for (float _t = 0; _t < _quarter; _t += Time.unscaledDeltaTime)
+            var _seq = DOTween.Sequence().SetUpdate(true).SetLink(gameObject);
+            _seq.Insert(0f, _s.Root.DOLocalRotate(new Vector3(0f, 90f, 0f), _quarter).SetEase(Ease.InQuad));
+            _seq.Insert(0f, _s.Root.DOScale(_peakScale, _quarter).SetEase(Ease.OutQuad));
+            _seq.AppendCallback(() =>
             {
-                float _u = _t / _quarter;
-                _s.Root.localRotation = Quaternion.Euler(0, 90f * _u * _u, 0);
-                _s.Root.localScale = Vector3.one * Mathf.Lerp(1f, _peakScale, 1f - (1f - _u) * (1f - _u));
-                yield return null;
-            }
-            _s.Icon.sprite = _data ? _data.WeaponIcon : null;
-            _s.Icon.enabled = _data && _data.WeaponIcon; _s.Icon.color = Color.white;
-            if (_s.Ink) _s.Ink.enabled = false;
-            if (_s.Glow) _s.Glow.color = _data ? new Color(_sig.r, _sig.g, _sig.b, 0.9f) : new Color(1, 1, 1, 0.25f);
-            for (float _t = 0; _t < _rest; _t += Time.unscaledDeltaTime)
-            {
-                float _u = _t / _rest;
-                _s.Root.localRotation = Quaternion.Euler(0, 90f + 270f * (1f - Mathf.Pow(1f - _u, 3f)), 0);
-                _s.Root.localScale = Vector3.one * Mathf.LerpUnclamped(_peakScale, 1f, OutBack(_u, 2.2f));
-                yield return null;
-            }
-            _s.Root.localRotation = Quaternion.identity;
-            for (float _t = 0; _t < _landTime; _t += Time.unscaledDeltaTime)
-            {
-                float _u = _t / _landTime;
-                _s.Root.localScale = Vector3.one * (1f + _landPunch * Mathf.Sin(_u * Mathf.PI * 2.5f) * (1f - _u));
-                yield return null;
-            }
-            _s.Root.localScale = Vector3.one;
-            _s.Running = null;
+                _s.Icon.sprite = _data ? _data.WeaponIcon : null;
+                _s.Icon.enabled = _data && _data.WeaponIcon; _s.Icon.color = Color.white;
+                if (_s.Ink) _s.Ink.enabled = false;
+                if (_s.Glow) _s.Glow.color = _data ? new Color(_sig.r, _sig.g, _sig.b, 0.9f) : new Color(1, 1, 1, 0.25f);
+            });
+            _seq.Insert(_quarter, _s.Root.DOLocalRotate(new Vector3(0f, 360f, 0f), _rest, RotateMode.FastBeyond360).SetEase(Ease.OutCubic));
+            _seq.Insert(_quarter, _s.Root.DOScale(1f, _rest).SetEase(Ease.OutBack, 2.2f));
+            _seq.AppendCallback(() => _s.Root.localRotation = Quaternion.identity);
+            _seq.Append(_s.Root.DOPunchScale(Vector3.one * _landPunch, _landTime, 2, 0.5f));
+            _seq.OnComplete(() => _s.Root.localScale = Vector3.one);
+            return _seq;
         }
 
         private static float OutBack(float _u, float _s) { _u -= 1f; return _u * _u * ((_s + 1f) * _u + _s) + 1f; }
