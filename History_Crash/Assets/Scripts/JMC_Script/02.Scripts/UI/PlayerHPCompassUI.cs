@@ -9,15 +9,15 @@ namespace HistoryCrash.UI
     /// 플레이어 HP 나침반 UI(화면 좌측 상단).
     /// - Blender에서 렌더한 HP 0~5 상태 이미지 6장(Assets/Art/Resources/UI/PlayerHP/UI_PlayerHP_n.png)을 HP에 맞춰 바꿔 보여 준다.
     /// - HP가 바뀌면 새 이미지가 짧게 겹쳐 나타나고(바늘이 넘어가며 루비가 꺼지는 느낌), 맞았을 때는 살짝 흔들린다.
-    /// - 씬에 따로 배치하지 않아도 게임이 시작되면 PlayerHealth가 있는 씬에서 스스로 만들어진다.
+    /// - 씬에 따로 배치하지 않아도 GameManager에 플레이어 체력(Health)이 연결된 씬에서 스스로 만들어진다.
     /// </summary>
     public class PlayerHPCompassUI : MonoBehaviour
     {
         private const string TEX_PATH = "UI/PlayerHP/UI_PlayerHP_";
         private const int MAX_STATE = 5;
 
-        [Header("참조")]
-        [SerializeField, Tooltip("비우면 씬에서 찾음")] private PlayerHealth _health;
+        // 플레이어 체력 (KDH 코어: GameManager.PlayerHealth = 플레이어의 Health)
+        private IHealthReadOnly _health;
 
         [Header("배치(기준 해상도 1920×1080)")]
         [SerializeField] private float _size = 330f;
@@ -34,18 +34,18 @@ namespace HistoryCrash.UI
         private int _shown = -1;
         private Coroutine _running;
 
-        // 씬이 열리면 PlayerHealth가 있는 경우에만 HP UI를 하나 만든다(씬 저장 없이 동작)
+        // 씬이 열리면 플레이어 체력이 연결된 경우에만 HP UI를 하나 만든다(씬 저장 없이 동작)
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void AutoCreate()
         {
             if (FindFirstObjectByType<PlayerHPCompassUI>()) return;
-            if (!FindFirstObjectByType<PlayerHealth>()) return;
+            if (GameManager.Instance == null || GameManager.Instance.PlayerHealth == null) return;
             new GameObject("UI_PlayerHPCompass").AddComponent<PlayerHPCompassUI>();
         }
 
         private void Awake()
         {
-            if (!_health) _health = FindFirstObjectByType<PlayerHealth>();
+            _health = GameManager.Instance != null ? GameManager.Instance.PlayerHealth : null;
             for (int _i = 0; _i <= MAX_STATE; _i++) _states[_i] = Resources.Load<Texture2D>(TEX_PATH + _i);
             Build();
         }
@@ -82,8 +82,8 @@ namespace HistoryCrash.UI
 
         private void Update()
         {
-            if (!_health) return;
-            int _hp = Mathf.Clamp(_health.HP, 0, MAX_STATE);
+            if (_health == null) return;
+            int _hp = Mathf.Clamp(_health.CurrentHp.CurrentValue, 0, MAX_STATE);
             if (_hp == _shown) return;
             if (_shown < 0) { _base.texture = _states[_hp]; _shown = _hp; return; }   // 처음엔 연출 없이
             bool _hurt = _hp < _shown;

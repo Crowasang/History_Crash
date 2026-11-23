@@ -19,4 +19,10 @@ public interface IGameFlow
 
     /// <summary>일시정지 중인지. 구독하면 바뀔 때마다 알림을 받습니다. (설정창 열기·닫기 등)</summary>
     ReadOnlyReactiveProperty<bool> IsPaused { get; }
+
+    /// <summary>플레이어 체력 (체력 UI 등이 읽음). 연결되지 않았으면 null</summary>
+    IHealthReadOnly PlayerHealth { get; }
+
+    /// <summary>보스(파라오) 체력 (보스 체력 바 등이 읽음). 연결되지 않았으면 null</summary>
+    IHealthReadOnly BossHealth { get; }
 }
