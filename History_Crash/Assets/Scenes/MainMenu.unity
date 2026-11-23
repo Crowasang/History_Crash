@@ -372,6 +372,11 @@ MonoBehaviour:
   - {fileID: 2800000, guid: f664778653256624eb1dd54bce21640e, type: 3}
   - {fileID: 2800000, guid: 46184017bead5db40bf1345617a15e6b, type: 3}
   _drapeTime: 0.45
+  _menuAudio: {fileID: 8300000, guid: 1a8e6aad8324f544cbbfc3079dc1aca2, type: 3}
+  _zoomAudio: {fileID: 8300000, guid: 7129d7364cb40274aa677a9b714ca3a7, type: 3}
+  _introAudio: {fileID: 8300000, guid: c9949a4cad80bd64096eed41d256847e, type: 3}
+  _audioFade: 0.6
+  _storyLoop: {fileID: 8300000, guid: c5219bbff8e53f347bd5f543fddb27c2, type: 3}
   _gameScene: Game
   _gameScenePath: Assets/Scenes/Game.unity
   _state: 0
