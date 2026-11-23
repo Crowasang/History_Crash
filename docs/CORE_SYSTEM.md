@@ -46,7 +46,8 @@
       .Subscribe(_state => SetActive(_state == GameStateType.Playing))
       .AddTo(this);
   ```
-- 게임이 끝나면 끌 컴포넌트: `DisableOnGameEnd`에 등록 (플레이어 조작 등)
+- 게임이 끝나면 끌 컴포넌트: `DisableOnGameEnd`에 등록 (플레이어 조작, 파라오 애니메이션 등)
+  - `Freeze Bodies`에 Rigidbody를 넣으면 게임이 끝날 때 그 자리에 고정됩니다 (속도 0, 위치·회전 잠금). 플레이어는 이미 등록되어 있어 멈춘 패턴 투사체에 밀리지 않습니다.
 - 진행 중에만 켤 오브젝트: `ActiveOnlyWhilePlaying`에 등록. 준비 중에는 꺼 두고 클리어·실패하면 끔 (코루틴도 멈춤)
   - KDH_Test에서는 `BossPatternDirector`(패턴·아누비스·호루스·지팡이)가 등록되어 있어, 대상 스크립트를 고치지 않고 진행 중에만 패턴이 돕니다.
 
