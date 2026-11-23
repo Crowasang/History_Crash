@@ -83,6 +83,9 @@ public class PlayerController : MonoBehaviour, IJumpState, IPlayerMotion, ISpeed
         }
     }
 
+    /// <summary>기본 걷기 속도 (m/초, 기획 v20: 4)</summary>
+    public float BaseMoveSpeed => _moveSpeed;
+
     /// <summary>달리기 여부와 속도 배율로 계산한 지상 이동 속도 (m/초)</summary>
     private float CurrentGroundSpeed => _moveSpeed * (_isRunning ? _runMultiplier : 1f) * _speedMultiplier;
 
