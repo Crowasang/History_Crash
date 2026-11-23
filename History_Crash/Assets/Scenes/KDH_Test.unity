@@ -34027,6 +34027,8 @@ MonoBehaviour:
   _targets:
   - {fileID: 1794931738}
   - {fileID: 1794931731}
+  _freezeBodies:
+  - {fileID: 1794931736}
 --- !u!75 &1794931741
 ConstantForce:
   m_ObjectHideFlags: 0
@@ -41170,6 +41172,7 @@ MonoBehaviour:
   _gameFlowSource: {fileID: 650339049}
   _targets:
   - {fileID: 2102868732}
+  _freezeBodies: []
 --- !u!65 &2103033617
 BoxCollider:
   m_ObjectHideFlags: 0
