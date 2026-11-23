@@ -47,6 +47,8 @@
       .AddTo(this);
   ```
 - 게임이 끝나면 끌 컴포넌트: `DisableOnGameEnd`에 등록 (플레이어 조작 등)
+- 진행 중에만 켤 오브젝트: `ActiveOnlyWhilePlaying`에 등록. 준비 중에는 꺼 두고 클리어·실패하면 끔 (코루틴도 멈춤)
+  - KDH_Test에서는 `BossPatternDirector`(패턴·아누비스·호루스·지팡이)가 등록되어 있어, 대상 스크립트를 고치지 않고 진행 중에만 패턴이 돕니다.
 
 ### 일시정지 — `IPauseControl`
 - Esc(`Pause` 입력) → `PauseInputHandler`가 `TogglePause()` 호출. 시간 정지(timeScale 0), 준비·진행 상태에서만 가능
@@ -158,7 +160,7 @@ if (_player.TryGetComponent(out IForcedMovable _movable)) _movable.TryForceMove(
 | `Stage/Gimmick/AnubisTeleport.cs` | 플레이어 직접 이동 → `IForcedMovable.TryForceMove(도착 칸)` (예고·효과는 그대로) |
 | `Stage/Gimmick/HorusTileCollapse.cs` | 타일이 무너질 때 콜라이더도 끄고, 수복할 때 켬 (빠지면 `FallZone`이 처리) |
 
-- 패턴 오브젝트(`Pattens`, `BossPatternDirector`)는 KDH_Test에 배치되어 있습니다.
+- 패턴 오브젝트(`Pattens`, `BossPatternDirector`)는 KDH_Test에 배치되어 있고, `ActiveOnlyWhilePlaying`으로 진행 중에만 돕니다.
 - 이제 TEST_JMC의 `PlayerMover` 플레이어는 패턴에 맞아도 피해가 들어가지 않습니다.
 
 ### 아직 바꿀 것
@@ -168,7 +170,7 @@ if (_player.TryGetComponent(out IForcedMovable _movable)) _movable.TryForceMove(
 | `Enemy/Mummy.cs`, `Enemy/MummySpawner.cs` | `PlayerMover`·`PlayerHealth` 참조를 아래 표대로 변경 |
 | `Player/PlayerLoadout.cs` | 같은 방식으로 변경 |
 | `UI/PlayerHPCompassUI.cs` | 체력 읽기를 `IHealthReadOnly.CurrentHp` 구독으로 변경 |
-| 보스 패턴·아누비스·호루스 | **게임이 끝나도(클리어·실패) 계속 돌아감** → `IGameFlow.CurrentState`가 `Playing`일 때만 동작하게 변경 |
+| 미라 등 새로 넣는 적·기믹 | 진행 중에만 동작해야 하면 `ActiveOnlyWhilePlaying`에 등록하거나 `IGameFlow.CurrentState` 구독 |
 
 ### 바꾸는 방법
 
