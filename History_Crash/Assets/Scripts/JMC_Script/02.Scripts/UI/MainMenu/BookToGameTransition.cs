@@ -1,4 +1,5 @@
 using System.Collections;
+using DG.Tweening;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
@@ -31,8 +32,11 @@ namespace HistoryCrash.UI
             var _sc = _go.GetComponent<CanvasScaler>(); _sc.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize; _sc.referenceResolution = new Vector2(1920f, 1080f); _sc.matchWidthOrHeight = 0.5f;
             var _t = _go.AddComponent<BookToGameTransition>();
             _t.Build(_spreadTex);
+            PauseSettingsUI.InputBlocked = true;     // 책이 다 내려갈 때까지 이동·시점·공격·ESC 막음
             return _t;
         }
+
+        private void OnDestroy() { PauseSettingsUI.InputBlocked = false; }
 
         private void Build(Texture _spreadTex)
         {
@@ -63,48 +67,39 @@ namespace HistoryCrash.UI
             float _prevScale = Time.timeScale > 0f ? Time.timeScale : 1f;
             Time.timeScale = 0f;                                          // 책이 내려갈 때까지 게임은 멈춤(설정창 닫힘과 같음)
 
-            // 1) 펼침면 → 설정창 도감으로 겹쳐 바꾸며 뒤 배경이 게임 화면(어둡게)으로
+            // 연출은 DOTween 시퀀스(게임 시간이 멈춰 있으므로 SetUpdate(true))
             var _dimC = new Color(0.03f, 0.035f, 0.02f, DIM);
-            for (float t = 0f; t < 0.35f; t += Time.unscaledDeltaTime)
+            bool _has = _frames != null && _frames.Length > 1;
+            var _seq = DOTween.Sequence().SetUpdate(true).SetLink(gameObject);
+            // 1) 펼침면 → 설정창 도감으로 겹쳐 바꾸며 뒤 배경이 게임 화면(어둡게)으로
+            _seq.Append(DOVirtual.Float(0f, 1f, 0.35f, _u =>
             {
-                float _u = Smooth(t / 0.35f);
                 SetAlpha(_spread, 1f - _u); SetAlpha(_bookImg, _u);
                 _dim.color = Color.Lerp(Color.black, _dimC, _u);
-                yield return null;
-            }
-            _spread.gameObject.SetActive(false); SetAlpha(_bookImg, 1f); _dim.color = _dimC;
-
+            }).SetEase(Ease.InOutSine));
+            _seq.AppendCallback(() => { _spread.gameObject.SetActive(false); SetAlpha(_bookImg, 1f); _dim.color = _dimC; });
             // 2) 줌아웃(화면을 채우던 책이 설정창 크기로)
-            for (float t = 0f; t < 0.65f; t += Time.unscaledDeltaTime)
-            {
-                float _u = Smooth(t / 0.65f);
-                SetBook(Mathf.Lerp(START_SCALE, SCALE, _u), 0f, Mathf.Lerp(0f, Y_OFFSET, _u));
-                yield return null;
-            }
-            SetBook(SCALE, 0f, Y_OFFSET);
-
-            // 3) 책이 덮임(설정창 펼침 프레임을 거꾸로) → 4) 아래로 떨어지며 막이 걷힘
-            bool _has = _frames != null && _frames.Length > 1;
+            _seq.Append(DOVirtual.Float(0f, 1f, 0.65f, _u => SetBook(Mathf.Lerp(START_SCALE, SCALE, _u), 0f, Mathf.Lerp(0f, Y_OFFSET, _u))).SetEase(Ease.InOutSine));
+            // 3) 책이 덮임(설정창 펼침 프레임을 거꾸로)
             if (_has)
             {
-                for (float t = 0f; t < 0.5f; t += Time.unscaledDeltaTime)
+                _seq.Append(DOVirtual.Float(1f, 0f, 0.5f, _u =>
                 {
-                    float _u = 1f - t / 0.5f;
                     _bookImg.sprite = _frames[Mathf.Min(_frames.Length - 1, Mathf.FloorToInt(_u * _frames.Length))];
                     SetBook(SCALE, CLOSED_SHIFT * (1f - Smooth(Mathf.Clamp01(_u * 2f))), Y_OFFSET);
-                    yield return null;
-                }
-                _bookImg.sprite = _frames[0];
+                }).SetEase(Ease.Linear));
+                _seq.AppendCallback(() => _bookImg.sprite = _frames[0]);
             }
-            for (float t = 0f; t < 0.4f; t += Time.unscaledDeltaTime)
+            // 4) 아래로 떨어지며 막이 걷힘
+            _seq.Append(DOVirtual.Float(0f, 1f, 0.4f, _u =>
             {
-                float _u = t / 0.4f;
                 _dim.color = new Color(_dimC.r, _dimC.g, _dimC.b, DIM * (1f - Smooth(_u)));
                 SetBook(SCALE, _has ? CLOSED_SHIFT : 0f, Y_OFFSET - 720f * _u * _u);
-                yield return null;
-            }
+            }).SetEase(Ease.Linear));
+            yield return _seq.WaitForCompletion();
             Time.timeScale = _prevScale;
             Cursor.lockState = CursorLockMode.Locked; Cursor.visible = false;
+            PauseSettingsUI.InputBlocked = false;    // 책이 다 내려간 이 순간부터 플레이어 조작 가능
             Destroy(gameObject);
         }
 

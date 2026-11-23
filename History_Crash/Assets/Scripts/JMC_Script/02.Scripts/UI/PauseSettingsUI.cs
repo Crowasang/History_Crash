@@ -1,4 +1,4 @@
-using System.Collections;
+using DG.Tweening;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -23,7 +23,10 @@ namespace HistoryCrash.UI
     public class PauseSettingsUI : MonoBehaviour
     {
         /// <summary>설정창이 열려 있는지(다른 입력 스크립트가 확인)</summary>
-        public static bool IsOpen { get; private set; }
+        public static bool IsOpen => s_open || InputBlocked;
+        private static bool s_open;
+        /// <summary>설정창이 아닌 연출(메인메뉴 → 게임 전환 등) 동안 게임 입력을 막을 때 켬. 켜져 있으면 IsOpen도 true로 보여서 이동·시점·공격이 멈춤</summary>
+        public static bool InputBlocked { get; set; }
 
         private const string TEX = "UI/Settings/";
         private const float BOOK_W = 960f, BOOK_H = 560f;   // 아래 좌표의 기준(도감 렌더 px). 실제 이미지는 2배 해상도
@@ -60,19 +63,19 @@ namespace HistoryCrash.UI
         private Image _selL, _selR, _selLine;
         private int _page = 1;   // 1 Settings, 2 Controls
         private float _prevTimeScale = 1f;
-        private Coroutine _fade;
+        private Sequence _fade;
         private Slider _sens, _master, _music, _sfx, _bright; private Toggle _invert, _full;
         private ColorAdjustments _colorAdj;
 
         // 메인메뉴 → 게임 씬처럼 씬이 바뀌어도 다시 만들어지게(AfterSceneLoad는 플레이를 시작할 때 한 번만 불림)
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void HookSceneLoaded() { UnityEngine.SceneManagement.SceneManager.sceneLoaded -= OnSceneLoadedAutoCreate; UnityEngine.SceneManagement.SceneManager.sceneLoaded += OnSceneLoadedAutoCreate; }
+        private static void HookSceneLoaded() { InputBlocked = false; UnityEngine.SceneManagement.SceneManager.sceneLoaded -= OnSceneLoadedAutoCreate; UnityEngine.SceneManagement.SceneManager.sceneLoaded += OnSceneLoadedAutoCreate; }
         private static void OnSceneLoadedAutoCreate(UnityEngine.SceneManagement.Scene _s, UnityEngine.SceneManagement.LoadSceneMode _m) { AutoCreate(); }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void AutoCreate()
         {
-            IsOpen = false;
+            s_open = false;
             if (FindFirstObjectByType<PauseSettingsUI>()) return;
             if (!FindFirstObjectByType<PlayerMover>()) return;
             new GameObject("UI_PauseSettings").AddComponent<PauseSettingsUI>();
@@ -87,12 +90,13 @@ namespace HistoryCrash.UI
             _canvas.enabled = false;
         }
 
-        private void OnDestroy() { if (IsOpen) { IsOpen = false; Time.timeScale = _prevTimeScale; } }
+        private void OnDestroy() { if (s_open) { s_open = false; Time.timeScale = _prevTimeScale; } }
 
         private void Update()
         {
+            if (InputBlocked) return;
             var _kb = Keyboard.current;
-            if (_kb != null && _kb.escapeKey.wasPressedThisFrame && !_busy) { if (IsOpen) Close(); else Open(); }
+            if (_kb != null && _kb.escapeKey.wasPressedThisFrame && !_busy) { if (s_open) Close(); else Open(); }
         }
 
         // ================= 열기/닫기 =================
@@ -100,85 +104,83 @@ namespace HistoryCrash.UI
         // 닫기: 글자가 사라짐 → 거꾸로 덮힘 → 아래로 내려가며 화면이 밝아짐. 게임은 다 닫힌 뒤 다시 흐른다
         public void Open()
         {
-            if (IsOpen || _busy) return;
-            IsOpen = true;
+            if (s_open || _busy) return;
+            s_open = true;
             _prevTimeScale = Time.timeScale > 0f ? Time.timeScale : 1f;
             Time.timeScale = 0f;
             Cursor.lockState = CursorLockMode.None; Cursor.visible = true;
             ShowPage(1); ShowLanguage(); RefreshControls();
             _canvas.enabled = true;
-            if (_fade != null) StopCoroutine(_fade);
-            _fade = StartCoroutine(OpenAnim());
+            _fade?.Kill();
+            _fade = OpenAnim();
         }
 
         public void Close()
         {
-            if (!IsOpen || _busy) return;
+            if (!s_open || _busy) return;
             PlayerPrefs.Save();
-            if (_fade != null) StopCoroutine(_fade);
-            _fade = StartCoroutine(CloseAnim());
+            _fade?.Kill();
+            _fade = CloseAnim();
         }
 
-        private IEnumerator OpenAnim()
+        // 연출은 DOTween 시퀀스(게임이 멈춰도 흐르는 시간). 곡선은 이전과 같도록 0→1 값을 받아 직접 배치
+        private Sequence OpenAnim()
         {
             _busy = true;
             SetContent(0f);
             bool _has = _frames != null && _frames.Length > 1;
             _bookImg.sprite = _has ? _frames[0] : _bookStatic;
+            var _seq = DOTween.Sequence().SetUpdate(true).SetLink(gameObject);
             // 1) 덮인 채로 올라옴(살짝 튀어 오름)
-            for (float t = 0f; t < _riseTime; t += Time.unscaledDeltaTime)
+            _seq.Append(DOVirtual.Float(0f, 1f, _riseTime, _u =>
             {
-                float _u = t / _riseTime;
                 SetDim(Smooth(_u));
                 SetBook(_has ? _closedShift : 0f, (1f - EaseOutBack(_u)) * -720f);
-                yield return null;
-            }
-            SetDim(1f); SetBook(_has ? _closedShift : 0f, 0f);
+            }).SetEase(Ease.Linear));
+            _seq.AppendCallback(() => { SetDim(1f); SetBook(_has ? _closedShift : 0f, 0f); });
             // 2) 펼침 프레임 재생(표지가 넘어가는 동안 책등이 화면 가운데로 옴)
             if (_has)
-            {
-                for (float t = 0f; t < _openTime; t += Time.unscaledDeltaTime)
+                _seq.Append(DOVirtual.Float(0f, 1f, _openTime, _u =>
                 {
-                    float _u = t / _openTime;
                     _bookImg.sprite = _frames[Mathf.Min(_frames.Length - 1, Mathf.FloorToInt(_u * _frames.Length))];
                     SetBook(_closedShift * (1f - Smooth(Mathf.Clamp01(_u * 2f))), 0f);
-                    yield return null;
-                }
-            }
+                }).SetEase(Ease.Linear));
             // 3) 고해상도 펼친 책으로 바꾸고 글자가 번져 나타남
-            _bookImg.sprite = _bookStatic; SetBook(0f, 0f);
-            for (float t = 0f; t < _textTime; t += Time.unscaledDeltaTime) { SetContent(Smooth(t / _textTime)); yield return null; }
-            SetContent(1f);
-            _busy = false; _fade = null;
+            _seq.AppendCallback(() => { _bookImg.sprite = _bookStatic; SetBook(0f, 0f); });
+            _seq.Append(DOVirtual.Float(0f, 1f, _textTime, _u => SetContent(Smooth(_u))).SetEase(Ease.Linear));
+            _seq.OnComplete(() => { SetContent(1f); _busy = false; _fade = null; });
+            return _seq;
         }
 
-        private IEnumerator CloseAnim()
+        private Sequence CloseAnim()
         {
             _busy = true;
             bool _has = _frames != null && _frames.Length > 1;
             float _tText = _closeTime * 0.15f, _tFlip = _has ? _closeTime * 0.55f : 0f, _tDrop = _closeTime - _tText - _tFlip;
-            for (float t = 0f; t < _tText; t += Time.unscaledDeltaTime) { SetContent(1f - t / _tText); yield return null; }
-            SetContent(0f);
-            for (float t = 0f; t < _tFlip; t += Time.unscaledDeltaTime)
+            var _seq = DOTween.Sequence().SetUpdate(true).SetLink(gameObject);
+            _seq.Append(DOVirtual.Float(1f, 0f, _tText, SetContent).SetEase(Ease.Linear));
+            _seq.AppendCallback(() => SetContent(0f));
+            if (_has)
+                _seq.Append(DOVirtual.Float(1f, 0f, _tFlip, _u =>   // 거꾸로
+                {
+                    _bookImg.sprite = _frames[Mathf.Min(_frames.Length - 1, Mathf.FloorToInt(_u * _frames.Length))];
+                    SetBook(_closedShift * (1f - Smooth(Mathf.Clamp01(_u * 2f))), 0f);
+                }).SetEase(Ease.Linear));
+            _seq.AppendCallback(() => { if (_has) _bookImg.sprite = _frames[0]; });
+            _seq.Append(DOVirtual.Float(0f, 1f, _tDrop, _u =>
             {
-                float _u = 1f - t / _tFlip;   // 거꾸로
-                _bookImg.sprite = _frames[Mathf.Min(_frames.Length - 1, Mathf.FloorToInt(_u * _frames.Length))];
-                SetBook(_closedShift * (1f - Smooth(Mathf.Clamp01(_u * 2f))), 0f);
-                yield return null;
-            }
-            if (_has) _bookImg.sprite = _frames[0];
-            for (float t = 0f; t < _tDrop; t += Time.unscaledDeltaTime)
-            {
-                float _u = t / _tDrop;
                 SetDim(1f - Smooth(_u));
                 SetBook(_has ? _closedShift : 0f, -720f * _u * _u);
-                yield return null;
-            }
-            _canvas.enabled = false;
-            IsOpen = false;
-            Time.timeScale = _prevTimeScale;
-            Cursor.lockState = CursorLockMode.Locked; Cursor.visible = false;
-            _busy = false; _fade = null;
+            }).SetEase(Ease.Linear));
+            _seq.OnComplete(() =>
+            {
+                _canvas.enabled = false;
+                s_open = false;
+                Time.timeScale = _prevTimeScale;
+                Cursor.lockState = CursorLockMode.Locked; Cursor.visible = false;
+                _busy = false; _fade = null;
+            });
+            return _seq;
         }
 
         private void SetDim(float _k) { var _c = _dimImg.color; _c.a = _dim * _k; _dimImg.color = _c; }
@@ -199,7 +201,7 @@ namespace HistoryCrash.UI
                 case 0: Close(); break;
                 case 1: ShowPage(1); break;
                 case 2: ShowPage(2); break;
-                case 3: break;   // Main Menu: 타이틀 씬이 생기면 연결
+                case 3: GoMainMenu(); break;
                 case 4: Quit(); break;
             }
         }
@@ -217,6 +219,43 @@ namespace HistoryCrash.UI
             _selR.rectTransform.anchoredPosition = _c + new Vector2(_w / 2f + 9f, 0f);
             _selLine.rectTransform.anchoredPosition = _c + new Vector2(0f, -8f);
             _selLine.rectTransform.sizeDelta = new Vector2(_w, 2.2f);
+        }
+
+        // ================= 메인메뉴로 =================
+        private const string MAIN_MENU_SCENE = "MainMenu";
+        private const string MAIN_MENU_PATH = "Assets/Art/TEST_JMC/MainMenu/MainMenu.unity";
+
+        /// <summary>Main Menu: 글자가 걷히고 펼친 도감이 화면 가득 다가오며 어두워짐 → 메인메뉴 씬(메인메뉴는 검정에서 밝아지며 시작)</summary>
+        private void GoMainMenu()
+        {
+            if (FindFirstObjectByType<MainMenuController>()) { Close(); return; }   // 메인메뉴에서 연 설정창이면 그냥 닫기
+            if (_busy) return;
+            _busy = true;
+            _fade?.Kill();
+            var _black = new Color(0f, 0f, 0f, 1f);
+            Color _d0 = _dimImg.color;
+            Vector2 _p0 = _book.anchoredPosition; float _s0 = _book.localScale.x, _s1 = _scale * (1700f / 740f) / 1.6f;   // 책이 화면을 채우는 크기(메인메뉴 → 게임 전환과 같은 비율)
+            var _seq = DOTween.Sequence().SetUpdate(true).SetLink(gameObject);
+            _seq.Append(DOVirtual.Float(1f, 0f, 0.15f, SetContent).SetEase(Ease.Linear));
+            _seq.Append(DOVirtual.Float(0f, 1f, 0.7f, _u =>
+            {
+                _book.localScale = Vector3.one * Mathf.Lerp(_s0, _s1, _u);
+                _book.anchoredPosition = Vector2.Lerp(_p0, Vector2.zero, _u);
+                _dimImg.color = Color.Lerp(_d0, _black, _u);
+            }).SetEase(Ease.InOutSine));
+            _seq.Append(_bookImg.DOFade(0f, 0.35f).SetEase(Ease.InSine));   // 마지막에 화면 전체가 검정
+            _seq.OnComplete(() =>
+            {
+                PlayerPrefs.Save();
+                Time.timeScale = 1f;
+                if (Application.CanStreamedLevelBeLoaded(MAIN_MENU_SCENE)) UnityEngine.SceneManagement.SceneManager.LoadSceneAsync(MAIN_MENU_SCENE);
+#if UNITY_EDITOR
+                else UnityEditor.SceneManagement.EditorSceneManager.LoadSceneAsyncInPlayMode(MAIN_MENU_PATH, new UnityEngine.SceneManagement.LoadSceneParameters(UnityEngine.SceneManagement.LoadSceneMode.Single));
+#else
+                else Debug.LogWarning("[PauseSettingsUI] MainMenu 씬이 빌드 목록에 없습니다. File > Build Profiles에 추가해 주세요.");
+#endif
+            });
+            _fade = _seq;
         }
 
         private static void Quit()
@@ -313,8 +352,7 @@ namespace HistoryCrash.UI
                 float _y = 222 + i * 38;
                 var _t = Label(_names[i], 322, _y, 21f, TextAlignmentOptions.Center, 180, INK);
                 int _idx = i;
-                if (i == 3) { _t.color = new Color(INK.r, INK.g, INK.b, 0.35f); }   // 타이틀 씬이 없어 아직 비활성
-                else MakeButton(_t, () => OnMenu(_idx));
+                MakeButton(_t, () => OnMenu(_idx));
                 _menu[i] = _t;
                 if (i < _names.Length - 1) Line(302, _y + 19, 342, 1f, INK_SOFT);
             }
