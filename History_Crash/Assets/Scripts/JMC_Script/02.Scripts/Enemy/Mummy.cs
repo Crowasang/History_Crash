@@ -29,14 +29,17 @@ namespace HistoryCrash.Enemy
         public TileGrid Grid { get => _grid; set => _grid = value; }
         [SerializeField, FormerlySerializedAs("player")] private Transform _player;
         public Transform Player { get => _player; set => _player = value; }
-        [SerializeField, FormerlySerializedAs("playerMover")] private PlayerMover _playerMover;
-        public PlayerMover PlayerMover { get => _playerMover; set => _playerMover = value; }
-        [SerializeField, FormerlySerializedAs("playerHealth")] private PlayerHealth _playerHealth;
-        public PlayerHealth PlayerHealth { get => _playerHealth; set => _playerHealth = value; }
+        // 플레이어·파라오 연결 (KDH 코어 인터페이스, 소환기가 채움)
+        private IJumpState _playerJump;
+        public IJumpState PlayerJump { get => _playerJump; set => _playerJump = value; }
+        private float _playerMoveSpeed = 4f;
+        public float PlayerMoveSpeed { get => _playerMoveSpeed; set => _playerMoveSpeed = value; }
+        private IDamageable _playerHealth;
+        public IDamageable PlayerHealth { get => _playerHealth; set => _playerHealth = value; }
         [SerializeField, FormerlySerializedAs("pharaoh")] private Transform _pharaoh;
         public Transform Pharaoh { get => _pharaoh; set => _pharaoh = value; }
-        [SerializeField, FormerlySerializedAs("pharaohHealth")] private PharaohHealth _pharaohHealth;
-        public PharaohHealth PharaohHealth { get => _pharaohHealth; set => _pharaohHealth = value; }
+        private IDamageable _pharaohHealth;
+        public IDamageable PharaohHealth { get => _pharaohHealth; set => _pharaohHealth = value; }
         [SerializeField, FormerlySerializedAs("animator")] private Animator _animator;
         public Animator Animator { get => _animator; set => _animator = value; }
         [SerializeField, FormerlySerializedAs("shellRenderer"), Tooltip("속성 발광을 입힐 에너지 껍질 렌더러")] private Renderer _shellRenderer;
@@ -150,7 +153,7 @@ namespace HistoryCrash.Enemy
             Vector3 _p = transform.position;
             Vector3 _to = _player.position - _p; _to.y = 0;
             float _dist = _to.magnitude;
-            float _speed = (_playerMover ? _playerMover.MoveSpeed : 4f) * _speedRatio;
+            float _speed = _playerMoveSpeed * _speedRatio;
             float _moved = 0f;
             // 다른 머미와 겹치지 않게: 가까우면 서로 밀어내는 방향을 더한다
             Vector3 _sep = Vector3.zero;
@@ -182,8 +185,8 @@ namespace HistoryCrash.Enemy
             if (_animator) _animator.speed = Mathf.Clamp(_moved / Mathf.Max(_walkClipSpeed, 0.01f), 0.6f, _maxWalkAnimSpeed);
 
             // 접촉 피해(기획: 1). PlayerHealth의 피격 무적이 연속 피해를 막는다.
-            if (_contactDamage > 0 && _playerHealth && _dist < _radius + 0.3f && _playerMover && _playerMover.HeightAboveGround < 0.3f)
-                _playerHealth.TakeDamage(_contactDamage, "Mummy " + ElementInfo.Name(_element));
+            if (_contactDamage > 0 && _playerHealth != null && _dist < _radius + 0.3f && _playerJump != null && _playerJump.GetHeightAboveGround() < 0.3f)
+                _playerHealth.TakeDamage(new DamageInfo(_contactDamage, ElementType.None, gameObject));
 
             if (Time.time >= _nextOrb) { _nextOrb = Time.time + _orbInterval; DropOrbNearPlayer(); }
         }
@@ -273,7 +276,7 @@ namespace HistoryCrash.Enemy
                 yield return null;
             }
             ElementFx.Burst(_element, _target, 1.6f, 40);
-            if (_pharaohHealth) _pharaohHealth.Damage(_pharaohDamage, "Mummy spirit " + ElementInfo.Name(_element));
+            if (_pharaohHealth != null) _pharaohHealth.TakeDamage(new DamageInfo(_pharaohDamage, ElementType.None, gameObject));   // 미라 1킬 = 파라오 피해 20 (기획 v20)
             var _trail = _spirit.GetComponentInChildren<ParticleSystem>();
             if (_trail) { _trail.transform.SetParent(null, true); var _em = _trail.emission; _em.rateOverTime = 0; Destroy(_trail.gameObject, 1f); }
             Destroy(_spirit);

@@ -23,10 +23,10 @@ namespace HistoryCrash.Combat
     public class PlayerStaffSkill : MonoBehaviour
     {
         // ---- 조정값 ----
-        public const float A_RADIUS = 1.1f, A_TIME = 1.6f, A_TURNS = 2f, A_HIT = 0.6f, A_SIZE = 0.55f;
+        public const float A_RADIUS = 1.4f, A_TIME = 1.6f, A_TURNS = 2f, A_HIT = 0.8f, A_SIZE = 0.55f;   // 맞히기 너무 어려워 회전 반경 1.1→1.4, 칼날 판정 0.6→0.8
         public const float B_TRIGGER = 2.3f, B_LIFE = 20f, B_SIZE = 2.8f;   // 함정 범위(0.55/0.7 → 1.8/2.2 → 2.8/3.4 너무 큼 → 2.3/2.8)
         public const int C_COUNT = 3; public const float C_INTERVAL = 0.18f, C_SPEED = 16f, C_RANGE = 14f, C_HIT = 0.5f, C_SIZE = 0.3f;
-        public const float D_HEIGHT = 3f, D_FALL_TIME = 0.55f, D_RADIUS = 1.4f, D_SIZE = 0.7f;
+        public const float D_HEIGHT = 3f, D_FALL_TIME = 0.55f, D_RADIUS = 1.8f, D_SIZE = 0.7f;   // 맞히기 너무 어려워 타격 반경 1.4→1.8 (바닥 마법진도 같이 커짐)
         public const float E_SPEED = 20f, E_RANGE = 16f, E_HIT = 0.6f, E_SIZE = 2.4f;   // 창 길이. 파라오 E 창 최대 9.7 m(절반 4.85는 너무 커서 약 1/4)
 
         public const float SKILL_LIGHT_INTENSITY = 0.8f;   // 스킬 오브젝트에 붙는 속성색 점광원 세기

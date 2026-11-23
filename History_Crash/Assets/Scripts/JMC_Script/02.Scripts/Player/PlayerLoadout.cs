@@ -16,10 +16,10 @@ namespace HistoryCrash.Player
     /// - E: Player 칸 기준 pickupRange칸 안의 가장 가까운 스태프/오브 줍기(같은 종류는 새로 주운 것으로 교체)
     /// - 좌클릭: 스태프와 오브를 모두 들고 있으면 공격(둘 다 1회용으로 소모). 공격체 색 = 오브 속성색
     /// </summary>
-    [RequireComponent(typeof(PlayerMover))]
     public class PlayerLoadout : MonoBehaviour
     {
         [SerializeField, FormerlySerializedAs("grid")] private TileGrid _grid;
+        [SerializeField, Tooltip("플레이어 모델 (비우면 Animator가 붙은 자식)")] private Transform _model;
         [SerializeField, FormerlySerializedAs("animator")] private Animator _animator;
         [SerializeField, FormerlySerializedAs("pickupRange"), Tooltip("획득 가능 범위(칸). 1이면 Player 칸과 주변 8칸")] private int _pickupRange = 1;
         [SerializeField, FormerlySerializedAs("pickupState"), Tooltip("획득 시 재생할 Animator 상태")] private string _pickupState = "Pickup_Object_Robe";
@@ -36,15 +36,27 @@ namespace HistoryCrash.Player
         public bool CanAttack { get { return HeldStaff >= 0 && HasOrb; } }
 
         private static readonly string[] _staffNames = { "A", "B", "C", "D", "E" };
-        private PlayerMover _mover;
         private BossPatternDirector _director;
+        // KDH 플레이어 연결: 이동 속도(물리), 시전 중 감속, 카메라
+        private Rigidbody _rb;
+        private ISpeedModifier _speed;
+        private Transform _camera;
 
         private void Awake()
         {
-            _mover = GetComponent<PlayerMover>();
-            if (!_grid) _grid = _mover.Grid;
-            if (!_animator && _mover.Model) _animator = _mover.Model.GetComponentInChildren<Animator>();
+            _rb = GetComponent<Rigidbody>();
+            _speed = GetComponent<ISpeedModifier>();
+            // 타일 격자가 붙은 패턴 오브젝트는 게임 진행 전에는 꺼져 있으므로(ActiveOnlyWhilePlaying) 꺼진 것도 찾음
+            if (!_grid) _grid = FindFirstObjectByType<TileGrid>(FindObjectsInactive.Include);
+            if (!_animator) _animator = GetComponentInChildren<Animator>();
+            if (!_model && _animator) _model = _animator.transform;
+            if (Camera.main) _camera = Camera.main.transform;
         }
+
+        // 시전 중 이동 속도 배율 (KDH PlayerController의 ISpeedModifier)
+        private float SpeedScale { set { if (_speed != null) _speed.SpeedMultiplier = value; } }
+
+        private Vector3 Velocity => _rb ? _rb.linearVelocity : Vector3.zero;
 
         private void Update()
         {
@@ -57,6 +69,7 @@ namespace HistoryCrash.Player
 
         public PickupItem FindPickable()
         {
+            if (_grid == null) _grid = FindFirstObjectByType<TileGrid>(FindObjectsInactive.Include);
             if (_grid == null) return null;
             var _pc = _grid.WorldToCell(transform.position);
             PickupItem _best = null; float _bestD = float.MaxValue;
@@ -102,7 +115,7 @@ namespace HistoryCrash.Player
         private Transform StaffTransform()
         {
             if (_staffTf) return _staffTf;
-            var _root = _mover && _mover.Model ? _mover.Model : transform;
+            var _root = _model ? _model : transform;
             foreach (var _t in _root.GetComponentsInChildren<Transform>(true)) if (_t.name == "Player_Staff") { _staffTf = _t; break; }
             return _staffTf;
         }
@@ -168,10 +181,10 @@ namespace HistoryCrash.Player
         /// <summary>현재 이동 방향(모델 기준)에 맞는 이동 시전 상태. 움직이지 않으면 null</summary>
         private string MoveCastState()
         {
-            if (!_mover.HasMoveInput || _moveCastStates == null || _moveCastStates.Length < 4) return null;
-            Vector3 _v = _mover.Velocity; _v.y = 0f;
-            if (_v.sqrMagnitude < 0.04f) return null;
-            Vector3 _local = _mover.Model ? _mover.Model.InverseTransformDirection(_v) : _v;
+            if (_moveCastStates == null || _moveCastStates.Length < 4) return null;
+            Vector3 _v = Velocity; _v.y = 0f;
+            if (_v.sqrMagnitude < 0.04f) return null;   // 움직이지 않으면(이동 입력 없음) 서서 시전
+            Vector3 _local = _model ? _model.InverseTransformDirection(_v) : _v;
             if (Mathf.Abs(_local.z) >= Mathf.Abs(_local.x)) return _local.z >= 0f ? _moveCastStates[0] : _moveCastStates[1];
             return _local.x < 0f ? _moveCastStates[2] : _moveCastStates[3];
         }
@@ -181,7 +194,7 @@ namespace HistoryCrash.Player
         private System.Collections.IEnumerator CastRoutine(int _staff, Element _orb)
         {
             IsCasting = true;
-            _mover.SpeedScale = _castMoveSpeedScale;   // 시전 중에도 이동 가능(느리게)
+            SpeedScale = _castMoveSpeedScale;   // 시전 중에도 이동 가능(느리게)
             float _wait = 0.1f;
             string _standState = _animator && _staff >= 0 && _staff < _castStates.Length ? _castStates[_staff] : null;
             string _playing = null;
@@ -234,17 +247,17 @@ namespace HistoryCrash.Player
                         _animator.CrossFade(_want, 0.15f, 0, _st.normalizedTime % 1f);
                         _playing = _want;
                     }
-                    _mover.SpeedScale = _playing == _standState ? 1f : _castMoveSpeedScale;
+                    SpeedScale = _playing == _standState ? 1f : _castMoveSpeedScale;
                     _guard -= Time.deltaTime;
                     yield return null;
                 }
                 if (!IsCasting)
                 {
-                    _mover.SpeedScale = 1f;
+                    SpeedScale = 1f;
                     if (InState(_playing) || _animator.IsInTransition(0)) { _animator.speed = 1f; _animator.CrossFadeInFixedTime("Locomotion", 0.25f); }
                 }
             }
-            else _mover.SpeedScale = 1f;
+            else SpeedScale = 1f;
         }
 
         private void FireSkill(int _heldStaff, Element _heldOrb)
@@ -252,8 +265,8 @@ namespace HistoryCrash.Player
             // 공격으로 오브를 소비: 지팡이 홀의 오브가 터지며 사라짐(시전 중 새 오브를 주웠다면 그대로 둠)
             if (!HasOrb) { _heldOrbForFx = _heldOrb; ClearSocketOrb(true); }
 
-            Vector3 _dir = _mover.Model ? _mover.Model.forward : transform.forward;
-            if (_mover.CameraTransform) { _dir = Vector3.ProjectOnPlane(_mover.CameraTransform.forward, Vector3.up); }
+            Vector3 _dir = _model ? _model.forward : transform.forward;
+            if (_camera) { _dir = Vector3.ProjectOnPlane(_camera.forward, Vector3.up); }
             _dir.y = 0; _dir = _dir.sqrMagnitude > 1e-4f ? _dir.normalized : Vector3.forward;
             // 주운 스태프의 패턴을 약화판으로 사용(모양 = 패턴 오브젝트, 색·효과 = 오브 속성)
             if (!_director) _director = FindFirstObjectByType<BossPatternDirector>();
