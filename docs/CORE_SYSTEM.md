@@ -5,7 +5,10 @@
 
 - 스크립트 위치: `History_Crash/Assets/Scripts/` (아래 경로는 이 폴더 기준)
 - 매니저 프리팹: `History_Crash/Assets/Prefabs/Managers.prefab`
-- 예시 씬: `History_Crash/Assets/Scenes/KDH_Test.unity`
+- 씬 (`History_Crash/Assets/Scenes/`, 씬 목록 순서대로)
+  - `MainMenu.unity`: 시작 씬. 게임 시작을 누르면 `Game`으로 넘어감
+  - `Game.unity`: 실제 게임 씬 (KDH_Test를 복사해서 만듦)
+  - `KDH_Test.unity`: KDH 테스트 씬 (팀원은 각자 자기 테스트 씬에서 작업)
 
 ---
 
@@ -25,6 +28,10 @@
 ## 2. 매니저 (씬이 바뀌어도 유지)
 
 시작 씬에 `Managers` 프리팹 하나만 둡니다. 다른 씬에 또 있으면 나중 것이 스스로 사라집니다.
+(`MainMenu`, `Game`, `KDH_Test` 모두 들어 있어서 어느 씬에서 플레이를 시작해도 됩니다.)
+
+- 다른 씬의 매니저를 인스펙터로 연결하면, 메인 메뉴에서 넘어왔을 때 그 매니저는 중복이라 사라집니다.
+  씬이 바뀐 뒤에도 써야 하면 누를 때 찾거나 `SceneLoader.Instance`처럼 `Instance`로 받습니다. (예: `UI/SceneChangeButton.cs`)
 
 | 매니저 | 파일 | 하는 일 | 쓰는 법 |
 |---|---|---|---|
@@ -40,6 +47,8 @@
 
 - 상태: `Ready`(준비) → `Playing`(진행) → `Clear`(파라오 처치) / `Fail`(플레이어 사망)
 - 읽기: `IGameFlow` — `CurrentState`(구독), `IsPlaying`, `ElapsedTime`, `ElapsedSeconds`(1초마다), `IsPaused`(구독)
+- 체력 UI용: `IGameFlow.PlayerHealth`, `BossHealth` (`IHealthReadOnly`, GameManager 인스펙터에 연결된 플레이어·파라오 체력)
+  - 씬에 배치하지 않아도 되는 UI(`PlayerHPCompassUI`, `BossPurifyBarUI`)는 `GameManager.Instance.PlayerHealth`로 체력을 읽습니다.
 - 진행 중일 때만 동작해야 하는 것(미라 리젠, 보스 패턴, 기믹)은 상태를 구독합니다.
   ```csharp
   _gameFlow.CurrentState
@@ -161,16 +170,22 @@ if (_player.TryGetComponent(out IForcedMovable _movable)) _movable.TryForceMove(
 | `Stage/Gimmick/AnubisTeleport.cs` | 플레이어 직접 이동 → `IForcedMovable.TryForceMove(도착 칸)` (예고·효과는 그대로) |
 | `Stage/Gimmick/HorusTileCollapse.cs` | 타일이 무너질 때 콜라이더도 끄고, 수복할 때 켬 (빠지면 `FallZone`이 처리) |
 
-- 패턴 오브젝트(`Pattens`, `BossPatternDirector`)는 KDH_Test에 배치되어 있고, `ActiveOnlyWhilePlaying`으로 진행 중에만 돕니다.
+| `Enemy/Mummy.cs` | 플레이어 점프 → `IJumpState`, 플레이어·파라오 피해 → `IDamageable`, 파라오 피해량은 소환기에서 받음 |
+| `Enemy/MummySpawner.cs` | 플레이어·파라오를 인터페이스로 넘김, 미라를 소환기 자식으로 생성(게임이 끝나면 함께 멈춤), 1킬당 파라오 피해 25 |
+| `Player/PlayerLoadout.cs` | `PlayerMover` 대신 Rigidbody 속도·`ISpeedModifier` 사용, 꺼진 `TileGrid`도 찾음 (지팡이·오브 줍기) |
+| `Combat/PlayerStaffSkill.cs` | 공격 범위 조금 넓힘 (A 반경 1.4, D 반경 1.8) |
+| `UI/PlayerHPCompassUI.cs`, `UI/BossPurifyBarUI.cs` | 체력을 `GameManager.Instance.PlayerHealth` / `BossHealth`로 읽음 (GameManager 없는 씬은 예전 방식) |
+| `UI/PauseSettingsUI.cs` | Esc 일시정지를 `GameManager`의 `IsPaused`와 연동 |
+
+- 패턴 오브젝트(`Pattens`, `BossPatternDirector`)와 미라 소환기는 KDH_Test·Game에 배치되어 있고, `ActiveOnlyWhilePlaying`으로 진행 중에만 돕니다.
 - 이제 TEST_JMC의 `PlayerMover` 플레이어는 패턴에 맞아도 피해가 들어가지 않습니다.
 
 ### 아직 바꿀 것
 
 | 파일 | 할 일 |
 |---|---|
-| `Enemy/Mummy.cs`, `Enemy/MummySpawner.cs` | `PlayerMover`·`PlayerHealth` 참조를 아래 표대로 변경 |
-| `Player/PlayerLoadout.cs` | 같은 방식으로 변경 |
-| `UI/PlayerHPCompassUI.cs` | 체력 읽기를 `IHealthReadOnly.CurrentHp` 구독으로 변경 |
+| `UI/MainMenu/MainMenuController.cs` | 저장 여부를 `PlayerPrefs`(`K_HAS_SAVE` 등)로 읽음 → `ISaveService` / `IIntroProgress`(SaveManager)로 맞추기 |
+| `UI/PauseSettingsUI.cs` | 마우스 감도·Y축 반전을 `ThirdPersonCamera`에 적용함 → KDH 플레이어 시점(`PlayerLook`)에도 적용되게 하기 (PlayerLook에 감도 설정 기능 추가 필요, KDH와 상의) |
 | 미라 등 새로 넣는 적·기믹 | 진행 중에만 동작해야 하면 `ActiveOnlyWhilePlaying`에 등록하거나 `IGameFlow.CurrentState` 구독 |
 
 ### 바꾸는 방법
