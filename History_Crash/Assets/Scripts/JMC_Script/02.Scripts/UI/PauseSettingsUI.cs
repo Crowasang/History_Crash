@@ -1,4 +1,5 @@
 using DG.Tweening;
+using R3;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -77,7 +78,7 @@ namespace HistoryCrash.UI
         {
             s_open = false;
             if (FindFirstObjectByType<PauseSettingsUI>()) return;
-            if (!FindFirstObjectByType<PlayerMover>()) return;
+            if (!FindFirstObjectByType<PlayerMover>() && GameManager.Instance == null) return;   // JMC 플레이어 또는 KDH GameManager가 있는 게임 씬
             new GameObject("UI_PauseSettings").AddComponent<PauseSettingsUI>();
         }
 
@@ -88,15 +89,24 @@ namespace HistoryCrash.UI
             Build();
             ApplyAll();
             _canvas.enabled = false;
+            // 팀 규칙: 씬에 GameManager가 있으면 일시정지는 GameManager가 맡고(Esc = PauseInputHandler), 설정창은 IsPaused를 따라 열고 닫힘
+            _gm = GameManager.Instance;
+            if (_gm != null) _gm.IsPaused.Skip(1).Subscribe(_p => { if (_p) OpenView(); else CloseView(); }).AddTo(this);
         }
 
-        private void OnDestroy() { if (s_open) { s_open = false; Time.timeScale = _prevTimeScale; } }
+        private GameManager _gm;
+
+        /// <summary>Esc로 설정창을 열 수 있는지. 메인메뉴는 끔(Settings 메뉴로만 열고, 열린 창은 Esc로 닫힘)</summary>
+        public bool AllowEscOpen { get; set; } = true;
+
+        private void OnDestroy() { if (s_open) { s_open = false; if (_gm == null) Time.timeScale = _prevTimeScale; } }
 
         private void Update()
         {
             if (InputBlocked) return;
+            if (_gm != null && _gm.GetComponent<PauseInputHandler>()) return;   // Esc는 팀의 PauseInputHandler가 처리 → IsPaused 구독으로 열고 닫음
             var _kb = Keyboard.current;
-            if (_kb != null && _kb.escapeKey.wasPressedThisFrame && !_busy) { if (s_open) Close(); else Open(); }
+            if (_kb != null && _kb.escapeKey.wasPressedThisFrame && !_busy) { if (s_open) Close(); else if (AllowEscOpen) Open(); }
         }
 
         // ================= 열기/닫기 =================
@@ -104,10 +114,17 @@ namespace HistoryCrash.UI
         // 닫기: 글자가 사라짐 → 거꾸로 덮힘 → 아래로 내려가며 화면이 밝아짐. 게임은 다 닫힌 뒤 다시 흐른다
         public void Open()
         {
-            if (s_open || _busy) return;
+            if (_gm != null) { if (!_gm.IsPaused.CurrentValue) _gm.Pause(); return; }   // GameManager가 멈추면 IsPaused 구독이 OpenView 호출
+            OpenView();
+        }
+
+        private void OpenView()
+        {
+            if (s_open) return;
+            _busy = false;
             s_open = true;
             _prevTimeScale = Time.timeScale > 0f ? Time.timeScale : 1f;
-            Time.timeScale = 0f;
+            if (_gm == null) Time.timeScale = 0f;   // GameManager가 있으면 시간은 GameManager가 멈춤
             Cursor.lockState = CursorLockMode.None; Cursor.visible = true;
             ShowPage(1); ShowLanguage(); RefreshControls();
             _canvas.enabled = true;
@@ -117,7 +134,15 @@ namespace HistoryCrash.UI
 
         public void Close()
         {
-            if (!s_open || _busy) return;
+            if (_gm != null) { if (_gm.IsPaused.CurrentValue) _gm.Resume(); else CloseView(); return; }   // GameManager가 풀리면 구독이 CloseView 호출
+            if (_busy) return;
+            CloseView();
+        }
+
+        private void CloseView()
+        {
+            if (!s_open) return;
+            _busy = false;
             PlayerPrefs.Save();
             _fade?.Kill();
             _fade = CloseAnim();
@@ -176,7 +201,7 @@ namespace HistoryCrash.UI
             {
                 _canvas.enabled = false;
                 s_open = false;
-                Time.timeScale = _prevTimeScale;
+                if (_gm == null) Time.timeScale = _prevTimeScale;   // GameManager가 있으면 Resume이 이미 시간을 되돌림
                 Cursor.lockState = CursorLockMode.Locked; Cursor.visible = false;
                 _busy = false; _fade = null;
             });
