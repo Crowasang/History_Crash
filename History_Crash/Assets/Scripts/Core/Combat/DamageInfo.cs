@@ -14,10 +14,14 @@ public readonly struct DamageInfo
     /// <summary>피해를 준 오브젝트 (없으면 null)</summary>
     public GameObject Source { get; }
 
-    public DamageInfo(int _amount, ElementType _element = ElementType.None, GameObject _source = null)
+    /// <summary>true면 무적 중이어도 피해가 들어감 (C 보석처럼 짧은 간격으로 계속 맞히는 공격)</summary>
+    public bool IgnoreInvulnerability { get; }
+
+    public DamageInfo(int _amount, ElementType _element = ElementType.None, GameObject _source = null, bool _ignoreInvulnerability = false)
     {
         Amount = _amount;
         Element = _element;
         Source = _source;
+        IgnoreInvulnerability = _ignoreInvulnerability;
     }
 }

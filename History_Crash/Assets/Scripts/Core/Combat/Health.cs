@@ -53,7 +53,8 @@ public class Health : MonoBehaviour, IDamageable, IHealthReadOnly, IInvincible, 
 
     public void TakeDamage(DamageInfo _info)
     {
-        if (!IsAlive || IsInvincible || _info.Amount <= 0) return;
+        if (!IsAlive || _info.Amount <= 0) return;
+        if (IsInvincible && !_info.IgnoreInvulnerability) return;
 
         _currentHp.Value = Mathf.Max(0, _currentHp.Value - _info.Amount);
         _onDamaged.OnNext(_info);
