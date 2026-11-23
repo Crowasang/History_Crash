@@ -3902,6 +3902,7 @@ MonoBehaviour:
   _femalePrefab: {fileID: 819696323086424496, guid: 94c87beec4f61a248bd1386bab32ab56, type: 3}
   _malePrefab: {fileID: 8093390285150480303, guid: b1f08e226ff12094bb3273275c96cb4c, type: 3}
   _maxAlive: 5
+  _pharaohDamagePerKill: 25
   _perGap: 1
   _spawnSpread: 1
   _spawnCells: []
