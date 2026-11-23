@@ -27,7 +27,7 @@ namespace HistoryCrash.UI
         public Image Glow { get => _glow; set => _glow = value; }
         [SerializeField, FormerlySerializedAs("current"), HideInInspector] private WeaponData _current;
         public WeaponData Current { get => _current; set => _current = value; }
-        [SerializeField, FormerlySerializedAs("running"), HideInInspector] private Coroutine _running;
-        public Coroutine Running { get => _running; set => _running = value; }
+        [System.NonSerialized] private DG.Tweening.Tween _running;   // 지금 진행 중인 연출(DOTween)
+        public DG.Tweening.Tween Running { get => _running; set => _running = value; }
     }
 }

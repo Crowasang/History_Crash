@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using DG.Tweening;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -187,11 +188,10 @@ namespace HistoryCrash.UI
             _turnGroup.gameObject.SetActive(true);
             yield return FadeGroup(_turnGroup, 0f, 1f, 0.4f);
             _skipRequested = false;
-            while (!_skipRequested)
-            {
-                _turnGroup.alpha = 0.6f + 0.4f * (0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 3.2f));
-                yield return null;
-            }
+            // 숨 쉬듯 깜빡임(1 ↔ 0.6 왕복)
+            var _pulse = _turnGroup.DOFade(0.6f, 0.98f).SetEase(Ease.InOutSine).SetLoops(-1, LoopType.Yoyo).SetUpdate(true).SetLink(_turnGroup.gameObject);
+            while (!_skipRequested) yield return null;
+            _pulse.Kill();
             _skipRequested = false;
             yield return FadeGroup(_turnGroup, _turnGroup.alpha, 0f, 0.15f);
             _turnGroup.gameObject.SetActive(false);
@@ -209,23 +209,12 @@ namespace HistoryCrash.UI
             _book.gameObject.SetActive(true);
             SetFlip(_flipFront, 1f, 1f); SetFlip(_flipBack, 0f, 1f);
             _flipBack.gameObject.SetActive(false);
-            const float T = 0.85f;
-            for (float t = 0f; t < T; t += Time.unscaledDeltaTime)
-            {
-                float _u = t / T; _u = _u * _u * (3f - 2f * _u);
-                if (_u < 0.5f)
-                {
-                    float _k = 1f - _u * 2f;                       // 오른쪽 페이지가 들려 책등 쪽으로 눕는 중
-                    SetFlip(_flipFront, _k, Mathf.Lerp(0.55f, 1f, _k));
-                }
-                else
-                {
-                    _flipFront.gameObject.SetActive(false); _flipBack.gameObject.SetActive(true);
-                    float _k = (_u - 0.5f) * 2f;                    // 뒷면(새 왼쪽 페이지)이 왼쪽으로 내려앉는 중
-                    SetFlip(_flipBack, _k, Mathf.Lerp(0.55f, 1f, _k));
-                }
-                yield return null;
-            }
+            // 책장 넘김(DOTween): 앞면이 책등 쪽으로 눕고(가속) → 뒷면이 왼쪽으로 내려앉음(감속)
+            var _flip = DOTween.Sequence().SetUpdate(true).SetLink(gameObject);
+            _flip.Append(DOVirtual.Float(1f, 0f, 0.425f, _k => SetFlip(_flipFront, _k, Mathf.Lerp(0.55f, 1f, _k))).SetEase(Ease.InSine));
+            _flip.AppendCallback(() => { _flipFront.gameObject.SetActive(false); _flipBack.gameObject.SetActive(true); });
+            _flip.Append(DOVirtual.Float(0f, 1f, 0.425f, _k => SetFlip(_flipBack, _k, Mathf.Lerp(0.55f, 1f, _k))).SetEase(Ease.OutSine));
+            yield return _flip.WaitForCompletion();
             _oldLeft.gameObject.SetActive(false); _flipFront.gameObject.SetActive(false); _flipBack.gameObject.SetActive(false);
             // 영상 레이어는 이제 안 씀
             _vp[_front].Stop(); SetAlpha(_vimg[_front], 0f);
@@ -344,6 +333,8 @@ namespace HistoryCrash.UI
         private void Update()
         {
             var _kb = Keyboard.current; var _ms = Mouse.current;
+            // 설정창(게임용)은 닫힐 때 커서를 잠그므로, 메인메뉴에서는 다시 풀어 줌
+            if (!PauseSettingsUI.IsOpen && Cursor.lockState != CursorLockMode.None) { Cursor.lockState = CursorLockMode.None; Cursor.visible = true; }
             if (_busy)
             {
                 if ((_kb != null && (_kb.anyKey.wasPressedThisFrame)) || (_ms != null && _ms.leftButton.wasPressedThisFrame)) _skipRequested = true;
@@ -531,20 +522,17 @@ namespace HistoryCrash.UI
         private static void Stretch(RectTransform _r) { _r.anchorMin = Vector2.zero; _r.anchorMax = Vector2.one; _r.offsetMin = _r.offsetMax = Vector2.zero; }
         private static void SetAlpha(Graphic _g, float _a) { var _c = _g.color; _c.a = _a; _g.color = _c; }
 
+        // 페이드는 DOTween(게임이 멈춰도 흐르는 시간). 흐름(영상 준비·입력 기다리기)은 코루틴이 트윈 끝을 기다림
         private static IEnumerator Fade(Graphic _g, float _a0, float _a1, float _dur, bool _smooth = true)
         {
-            for (float t = 0f; t < _dur; t += Time.unscaledDeltaTime)
-            {
-                float _u = t / _dur; if (_smooth) _u = _u * _u * (3f - 2f * _u);
-                SetAlpha(_g, Mathf.Lerp(_a0, _a1, _u)); yield return null;
-            }
-            SetAlpha(_g, _a1);
+            SetAlpha(_g, _a0);
+            yield return _g.DOFade(_a1, _dur).SetEase(_smooth ? Ease.InOutSine : Ease.Linear).SetUpdate(true).SetLink(_g.gameObject).WaitForCompletion();
         }
 
         private static IEnumerator FadeGroup(CanvasGroup _g, float _a0, float _a1, float _dur)
         {
-            for (float t = 0f; t < _dur; t += Time.unscaledDeltaTime) { _g.alpha = Mathf.Lerp(_a0, _a1, t / _dur); yield return null; }
-            _g.alpha = _a1;
+            _g.alpha = _a0;
+            yield return _g.DOFade(_a1, _dur).SetEase(Ease.Linear).SetUpdate(true).SetLink(_g.gameObject).WaitForCompletion();
         }
 
         private static void EnsureEventSystem()
