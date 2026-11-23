@@ -847,6 +847,7 @@ namespace HistoryCrash.Boss
 
         private void OnGUI()
         {
+            if (HistoryCrash.UI.PauseSettingsUI.IsOpen) return;   // 설정창이 열리면 OnGUI 글자는 그리지 않음(항상 UI 위에 그려지므로)
             string _pat = _current >= 0 ? ((BossPattern)_current) + "  " + _castTime.ToString("F2") + "s" : "-";
             float _top = HistoryCrash.UI.DebugHudLayout.Top;   // 좌측 상단 HP 나침반 아래부터
             GUI.Box(new Rect(10, _top + 10, 360, 150), "");

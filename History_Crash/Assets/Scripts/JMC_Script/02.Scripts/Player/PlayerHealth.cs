@@ -71,6 +71,7 @@ namespace HistoryCrash.Player
 
         private void OnGUI()
         {
+            if (HistoryCrash.UI.PauseSettingsUI.IsOpen) return;   // 설정창이 열리면 OnGUI 글자는 그리지 않음(항상 UI 위에 그려지므로)
             if (!_debugLabel) return;
             GUI.Box(new Rect(10, HistoryCrash.UI.DebugHudLayout.Top + 168, 360, 26), "");
             string _hearts = "";
