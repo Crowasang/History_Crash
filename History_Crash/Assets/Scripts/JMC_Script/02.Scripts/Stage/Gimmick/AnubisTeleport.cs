@@ -55,14 +55,14 @@ namespace HistoryCrash.Stage
         private readonly List<Renderer> _eyes = new List<Renderer>();
         private readonly List<Light> _eyeLights = new List<Light>();
         private Material _eyeMat, _lineMat;
-        private PlayerMover _mover; private PlayerHealth _health;
+        private IForcedMovable _movable;   // 플레이어 강제 이동 (PlayerForcedMover: 낙하 대기·포물선·착지·무적 처리)
         private HorusTileCollapse _horus;
 
         private void Start()
         {
             if (!_grid) _grid = FindFirstObjectByType<TileGrid>();
             _horus = FindFirstObjectByType<HorusTileCollapse>();
-            if (_player) { _mover = _player.GetComponent<PlayerMover>(); _health = _player.GetComponent<PlayerHealth>(); }
+            if (_player) _movable = _player.GetComponent<IForcedMovable>();
             if (_pillars.Count == 0) CollectPillars();
             CreateEyes(); SetEyes(0f);
             StartCoroutine(Loop());
@@ -123,7 +123,7 @@ namespace HistoryCrash.Stage
             if (!_player || _grid == null || _pillars.Count == 0 || _busy) yield break;
             _busy = true;
             try { yield return TriggerBody(); }
-            finally { _busy = false; if (_mover && !_mover.enabled) _mover.enabled = true; }
+            finally { _busy = false; }   // 조작 잠금은 PlayerForcedMover가 항상 풀어 줌
         }
         private bool _busy;   // 강제 이동이 겹쳐 실행되면 이동 스크립트가 꺼진 채 남는 문제 방지
 
@@ -165,24 +165,17 @@ namespace HistoryCrash.Stage
             }
 
             // 3) 강제 이동(이동 중 무적 + 도착 후 0.5초 무적)
-            while (_mover && _mover.IsFalling) yield return null;
+            //    낙하 대기·포물선 이동·착지·무적·조작 잠금은 플레이어의 IForcedMovable(PlayerForcedMover)이 처리
             if (!IsGoodDest(_dest)) { _dest = PickDest(_pillarCell); _destPos = _grid.CellCenter(_dest, _grid.FloorTopY); MoveCircle(_circle, _decal, _destPos + Vector3.up * 0.02f); }
             Status = "Anubis: pulling";
-            if (_health) _health.GrantInvulnerability(_pullTime + _arriveInvul);
-            if (_mover) _mover.enabled = false;
-            // 점프 중이어도 도착은 바닥 높이로(공중 높이를 유지한 채 굳지 않게)
-            Vector3 _from = _player.position; Vector3 _to = new Vector3(_destPos.x, _mover ? _mover.GroundY : _from.y, _destPos.z);
+            Vector3 _from = _player.position;
             var _trail = TrailFx(_player);
             BurstAt(_from + Vector3.up * 0.3f);
-            for (float _t = 0; _t < _pullTime; _t += Time.deltaTime)
+            if (_movable != null && _movable.TryForceMove(_destPos))
             {
-                float _u = _t / _pullTime; float _e = _u * _u * (3f - 2f * _u);
-                _player.position = Vector3.Lerp(_from, _to, _e) + Vector3.up * Mathf.Sin(_u * Mathf.PI) * 0.6f;
-                yield return null;
+                while (_movable.IsForceMoving) yield return null;
             }
-            _player.position = _to;
-            BurstAt(_to + Vector3.up * 0.3f);
-            if (_mover) { _mover.enabled = true; _mover.SnapToGround(); }
+            BurstAt(_player.position + Vector3.up * 0.3f);
             if (_trail) { var _em = _trail.emission; _em.rateOverTime = 0; _trail.transform.SetParent(null, true); Destroy(_trail.gameObject, 1f); }
             Debug.Log("[Anubis] Pulled player to cell " + _dest + " (pillar " + _pillar.name + ")");
 
