@@ -77,6 +77,8 @@ if (_other.TryGetComponent(out IDamageable _target))
 }
 ```
 - 피격 후 무적 시간은 `Health` 인스펙터의 값(플레이어 1초)으로 자동 적용됩니다.
+- 무적이어도 피해를 주려면(C 보석처럼 짧은 간격으로 계속 맞히는 공격) 마지막 인자를 `true`로:
+  `new DamageInfo(1, ElementType.None, gameObject, true)`
 - 체력 UI 예시: `UI/HeartView.cs`, `UI/HealthBarView.cs` (`Bind(IHealthReadOnly)`)
 
 ---
@@ -145,13 +147,35 @@ if (_player.TryGetComponent(out IForcedMovable _movable)) _movable.TryForceMove(
 
 ## 9. 팀원 스크립트를 코어로 바꿀 때 (JMC_Script)
 
-`JMC_Script`의 보스·기믹·미라·UI 스크립트는 `PlayerMover`, `PlayerHealth`, `PlayerAnimator`를 직접 찾습니다.
-실제 게임에서는 `PlayerController` 계열을 쓰므로 합칠 때 아래처럼 바꿉니다.
+`JMC_Script`의 일부 스크립트는 `PlayerMover`, `PlayerHealth`, `PlayerAnimator`를 직접 찾습니다.
+실제 게임에서는 `PlayerController` 계열을 쓰므로 아래처럼 바꿉니다.
+
+### 바꾼 것 (KDH_Test에서 KDH 플레이어로 동작 확인)
+
+| 파일 | 바꾼 내용 |
+|---|---|
+| `Boss/BossPatternDirector.cs` | 점프 회피 → `IJumpState.GetHeightAboveGround()`, 피해 → `IDamageable` (C 보석은 무적 무시) |
+| `Stage/Gimmick/AnubisTeleport.cs` | 플레이어 직접 이동 → `IForcedMovable.TryForceMove(도착 칸)` (예고·효과는 그대로) |
+| `Stage/Gimmick/HorusTileCollapse.cs` | 타일이 무너질 때 콜라이더도 끄고, 수복할 때 켬 (빠지면 `FallZone`이 처리) |
+
+- 패턴 오브젝트(`Pattens`, `BossPatternDirector`)는 KDH_Test에 배치되어 있습니다.
+- 이제 TEST_JMC의 `PlayerMover` 플레이어는 패턴에 맞아도 피해가 들어가지 않습니다.
+
+### 아직 바꿀 것
+
+| 파일 | 할 일 |
+|---|---|
+| `Enemy/Mummy.cs`, `Enemy/MummySpawner.cs` | `PlayerMover`·`PlayerHealth` 참조를 아래 표대로 변경 |
+| `Player/PlayerLoadout.cs` | 같은 방식으로 변경 |
+| `UI/PlayerHPCompassUI.cs` | 체력 읽기를 `IHealthReadOnly.CurrentHp` 구독으로 변경 |
+| 보스 패턴·아누비스·호루스 | **게임이 끝나도(클리어·실패) 계속 돌아감** → `IGameFlow.CurrentState`가 `Playing`일 때만 동작하게 변경 |
+
+### 바꾸는 방법
 
 | 지금 쓰는 것 | 바꿀 것 |
 |---|---|
 | `PlayerHealth.TakeDamage(...)` | `IDamageable.TakeDamage(new DamageInfo(...))` |
-| `TakeDamage(..., ignoreInvulnerability: true)` (C 보석) | **아직 없음** → 필요하면 KDH에게 요청 (`Health`에 추가) |
+| `TakeDamage(..., ignoreInvulnerability: true)` | `new DamageInfo(양, ElementType.None, gameObject, true)` |
 | `PlayerHealth`의 무적 (`GrantInvulnerability`) | `IInvincible.SetInvincible(초)` |
 | `PlayerHealth`의 HP 읽기 (UI) | `IHealthReadOnly.CurrentHp` 구독 |
 | `PlayerMover`의 점프 회피 높이 판정 | `IJumpState.IsDodgingByJump()` |
@@ -159,7 +183,4 @@ if (_player.TryGetComponent(out IForcedMovable _movable)) _movable.TryForceMove(
 | 아누비스 끌고 가기 (이동 스크립트 끄고 직접 옮기기) | `IForcedMovable.TryForceMove(도착 칸)` |
 | `PlayerMover`의 이동 막기 | `IMovementLock.Lock()` / `Unlock()` |
 | `PlayerAnimator`의 상태 읽기 | `IPlayerMotion` 이벤트 |
-| 호루스 낙하 처리 | 타일만 끄면 `FallZone`이 처리 |
-
-해당 파일: `Boss/BossPatternDirector.cs`, `Boss/PatternHitBox.cs`, `Enemy/Mummy.cs`, `Enemy/MummySpawner.cs`,
-`Stage/Gimmick/AnubisTeleport.cs`, `Stage/Gimmick/HorusTileCollapse.cs`, `Player/PlayerLoadout.cs`, `UI/PlayerHPCompassUI.cs`
+| 구덩이 낙하 처리 | 타일 콜라이더만 끄면 `FallZone`이 처리 |
