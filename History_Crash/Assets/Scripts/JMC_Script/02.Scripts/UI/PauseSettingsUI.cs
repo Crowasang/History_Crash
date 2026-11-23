@@ -248,7 +248,7 @@ namespace HistoryCrash.UI
 
         // ================= 메인메뉴로 =================
         private const string MAIN_MENU_SCENE = "MainMenu";
-        private const string MAIN_MENU_PATH = "Assets/Art/TEST_JMC/MainMenu/MainMenu.unity";
+        private const string MAIN_MENU_PATH = "Assets/Scenes/MainMenu.unity";   // 메인메뉴 씬만 예외로 Scenes 폴더(빌드 목록 맨 앞)
 
         /// <summary>Main Menu: 글자가 걷히고 펼친 도감이 화면 가득 다가오며 어두워짐 → 메인메뉴 씬(메인메뉴는 검정에서 밝아지며 시작)</summary>
         private void GoMainMenu()
