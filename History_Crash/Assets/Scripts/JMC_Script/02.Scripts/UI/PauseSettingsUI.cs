@@ -64,6 +64,11 @@ namespace HistoryCrash.UI
         private Slider _sens, _master, _music, _sfx, _bright; private Toggle _invert, _full;
         private ColorAdjustments _colorAdj;
 
+        // 메인메뉴 → 게임 씬처럼 씬이 바뀌어도 다시 만들어지게(AfterSceneLoad는 플레이를 시작할 때 한 번만 불림)
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void HookSceneLoaded() { UnityEngine.SceneManagement.SceneManager.sceneLoaded -= OnSceneLoadedAutoCreate; UnityEngine.SceneManagement.SceneManager.sceneLoaded += OnSceneLoadedAutoCreate; }
+        private static void OnSceneLoadedAutoCreate(UnityEngine.SceneManagement.Scene _s, UnityEngine.SceneManagement.LoadSceneMode _m) { AutoCreate(); }
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void AutoCreate()
         {
@@ -353,7 +358,8 @@ namespace HistoryCrash.UI
         }
 
         // 조작법: { 키(영어), 설명(영어), 키(한국어), 설명(한국어) } — 설정창 Language에 따라 바뀜
-        private static readonly string[,] CONTROLS =
+        // 메인메뉴 도감의 조작법 페이지(MainMenuController)도 같은 목록을 씀
+        public static readonly string[,] CONTROLS =
         {
             { "W A S D", "Move", "W A S D", "이동" }, { "Shift", "Run", "Shift", "달리기" }, { "Space", "Jump", "Space", "점프" },
             { "Left Click", "Attack", "좌클릭", "공격" }, { "E", "Pick Up", "E", "줍기" }, { "Mouse", "Look", "마우스", "시점" },
@@ -462,7 +468,7 @@ namespace HistoryCrash.UI
         /// 찾지 못하면 null(글자가 네모로 보일 수 있음).
         /// </summary>
         private static TMP_FontAsset _koFont; private static bool _koTried;
-        private static TMP_FontAsset KoreanFont()
+        internal static TMP_FontAsset KoreanFont()
         {
             if (_koTried) return _koFont;
             _koTried = true;
