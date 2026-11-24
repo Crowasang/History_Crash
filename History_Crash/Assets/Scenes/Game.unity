@@ -38274,6 +38274,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::HistoryCrash.Boss.HorusTileCollapse
   _grid: {fileID: 1965269510}
   _floorRoot: {fileID: 633606772}
+  _unreachableAreas:
+  - {fileID: 1400371365}
+  - {fileID: 1400371368}
+  - {fileID: 1400371371}
   _period: 15
   _firstDelay: 5
   _warnTime: 2
