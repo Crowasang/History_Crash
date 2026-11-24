@@ -671,7 +671,7 @@ namespace HistoryCrash.Boss
                         EnsureFx();
                         Vector3 _p = _f.Start + _f.Dir * _f.Total;
                         _fxC.Burst(_p, Vector3.up, 1.2f, 8);
-                        if (Vector3.Distance(_player.position, _p) < _cBlastRadius + _playerRadius) Hit(_i, true, "C Gem " + (_i + 1) + " Blast");
+                        if (Vector3.Distance(_player.position, _p) < _cBlastRadius + _playerRadius) Hit(_i, true, "C Gem " + (_i + 1) + " Blast", _p);
                         if (_i == 2) DropStaff(2, _p);   // C: 3번째 보석이 터진 지점
                     }
                 }
@@ -782,6 +782,12 @@ namespace HistoryCrash.Boss
         const int HIT_LAYER = 2; // Ignore Raycast: 카메라 충돌 검사(DefaultRaycastLayers)에 걸리지 않음
         private float _playerRadius = 0.29f;
         private IDamageable _health;   // 플레이어 체력 (Health)
+        private IKnockback _knockback; // 플레이어 넉백 (PlayerController)
+        private float _knockbackUntil; // 밀리는 중에는 새 넉백을 겹치지 않음(보석 몸통+폭발, 지팡이 연속 등)
+
+        [Header("피격 넉백(옆에서 날아오는 A·C·E만. 밑에서 솟는 B·위에서 떨어지는 D는 피해만)")]
+        [SerializeField, Tooltip("밀려나는 거리(m)")] private float _knockbackDistance = 0.6f;
+        [SerializeField, Tooltip("밀려나는 시간(초)")] private float _knockbackTime = 0.15f;
 
         private void BuildHitBoxes()
         {
@@ -797,6 +803,7 @@ namespace HistoryCrash.Boss
                 if (_r) _playerRadius = _r.bounds.extents.y;
             }
             _health = _player.GetComponent<IDamageable>();
+            _knockback = _player.GetComponent<IKnockback>();
         }
 
         private void AddHitBox(Transform _t, int _pattern, int _slot, string _label)
@@ -808,6 +815,8 @@ namespace HistoryCrash.Boss
             if (_mc == null) _mc = _t.gameObject.AddComponent<MeshCollider>();   // ??는 유니티의 가짜 null을 걸러내지 못함
             _mc.sharedMesh = _mf.sharedMesh;
             _mc.convex = false;
+            // 판정은 OverlapSphere로만 하므로 물리 접촉은 끔(켜 두면 날아오는 투사체가 플레이어를 밀어 미끄러지게 함)
+            _mc.excludeLayers = ~0;
             _mc.enabled = false;
             _t.gameObject.layer = HIT_LAYER;
             _hitBoxes.Add(new PatternHitBox { Col = _mc, T = _t, Pattern = _pattern, Slot = _slot, Label = _label });
@@ -826,13 +835,14 @@ namespace HistoryCrash.Boss
             int _n = Physics.OverlapSphereNonAlloc(_player.position, _playerRadius, _overlapBuf, 1 << HIT_LAYER, QueryTriggerInteraction.Collide);
             for (int _k = 0; _k < _n; _k++)
                 foreach (PatternHitBox _hb in _hitBoxes)
-                    if (_hb.Col == _overlapBuf[_k] && _hb.Pattern == _current) Hit(_hb.Slot, true, _hb.Label);
+                    if (_hb.Col == _overlapBuf[_k] && _hb.Pattern == _current) Hit(_hb.Slot, true, _hb.Label, _hb.Col.bounds.center);
         }
 
         private static float Flat(Vector3 _v) { _v.y = 0; return _v.magnitude; }
         private bool Airborne() { return _jumpState != null && _jumpState.GetHeightAboveGround() > _dodgeHeight; }
 
-        private void Hit(int _slot, bool _cond, string _label)
+        /// <summary>_from: 맞힌 투사체(폭발) 위치. 옆에서 날아오는 패턴(A·C·E)이면 그 반대쪽으로 조금 밀려남</summary>
+        private void Hit(int _slot, bool _cond, string _label, Vector3? _from = null)
         {
             if (!_cond || _hitFlags[_slot]) return;
             _hitFlags[_slot] = true;
@@ -842,6 +852,12 @@ namespace HistoryCrash.Boss
             // C 보석은 0.55초 간격이라 무적(1초)에 막히지 않게, 맞을 때마다 1씩 깎는다
             bool _ignoreInvul = _current == (int)BossPattern.C && _cIgnoreInvulnerability;
             if (_health != null) _health.TakeDamage(new DamageInfo(1, ElementType.None, gameObject, _ignoreInvul));
+            bool _sideHit = _current == (int)BossPattern.A || _current == (int)BossPattern.C || _current == (int)BossPattern.E;
+            if (_sideHit && _from.HasValue && _knockback != null && Time.time >= _knockbackUntil)
+            {
+                _knockback.Knockback(_player.position - _from.Value, _knockbackDistance, _knockbackTime);
+                _knockbackUntil = Time.time + _knockbackTime + 0.1f;
+            }
             Debug.Log("[BossPattern] Hit: " + _label + " (total " + HitCount + ", ignoreInvul=" + _ignoreInvul + ")");
         }
 
