@@ -125,3 +125,7 @@ InitTestScene*.unity*
 
 # Resources: 안의 파일들(바르코 에셋 프리팹 등)은 git으로 관리하지 않음 (나중에 Art로 옮겨서 따로 공유 예정)
 /[Aa]ssets/[Rr]esources/*
+
+# 개인용 에디터 툴(오브젝트 바닥 붙이기) - 저장소에 올리지 않음
+/Assets/Scripts/System/SnapToGround.cs
+/Assets/Scripts/System/SnapToGround.cs.meta
