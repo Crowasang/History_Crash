@@ -9,7 +9,7 @@
 
 | 대상 | 규칙 | 예시 |
 |------|------|------|
-| 변수 (필드, 지역 변수, 매개변수) | camelCase (소문자로 시작) | `moveSpeed`, `currentHp`, `targetPos` |
+| 변수 (필드, 지역 변수, 매개변수) | _camelCase (소문자로 시작) | `_moveSpeed`, `_currentHp`, `_targetPos` |
 | 클래스 | PascalCase (대문자로 시작) | `PlayerController`, `ItemData` |
 | 메서드 | PascalCase (대문자로 시작) | `TakeDamage()`, `MovePlayer()` |
 | 상수 | 전부 대문자, 단어 사이는 `_` | `MAX_HP`, `MAX_INVENTORY_SIZE` |
@@ -21,26 +21,26 @@ public class PlayerController : MonoBehaviour
 {
     public const int MAX_HP = 100;
 
-    [SerializeField] private float moveSpeed = 5f;
+    [SerializeField] private float _moveSpeed = 5f;
 
-    private int currentHp;
-    private bool isDead;
-    private Rigidbody2D rigidbody2d;
+    private int _currentHp;
+    private bool _isDead;
+    private Rigidbody2D _rigidbody2d;
 
     private void Awake()
     {
-        rigidbody2d = GetComponent<Rigidbody2D>();
-        currentHp = MAX_HP;
+        _rigidbody2d = GetComponent<Rigidbody2D>();
+        _currentHp = MAX_HP;
     }
 
-    public void TakeDamage(int damageAmount)
+    public void TakeDamage(int _damageAmount)
     {
-        if (isDead) return;
+        if (_isDead) return;
 
-        currentHp -= damageAmount;
-        if (currentHp <= 0)
+        _currentHp -= _damageAmount;
+        if (_currentHp <= 0)
         {
-            isDead = true;
+            _isDead = true;
         }
     }
 }
@@ -96,7 +96,7 @@ public void TakeDamage(int damageAmount) { ... }
 |------|------|------|
 | `feat` | 새 기능 추가 | `feat: 플레이어 대시 기능 추가` |
 | `fix` | 버그 수정 | `fix: 점프 중 이중 점프 되는 문제 수정` |
-| `docs` | 문서 수정 | `docs: 코딩 컨벤션 수정` |
+| `doc` | 문서 수정 | `doc: 코딩 컨벤션 수정` |
 
 - 한 커밋에는 한 가지 작업만 담습니다.
 - 커밋 전에 Unity에서 에러가 없는지 확인합니다.
@@ -109,9 +109,11 @@ public void TakeDamage(int damageAmount) { ... }
 |--------|------|
 | `main` | 항상 실행 가능한 안정 버전 |
 | `dev` | 개발 통합 브랜치 |
-| `feature/기능이름` | 기능 개발 (예: `feature/player-dash`) |
+| `feat/기능이름` | 기능 개발 (예: `feat/player-dash`) |
 | `fix/버그이름` | 버그 수정 (예: `fix/jump-bug`) |
+| `doc/문서이름` | 문서 수정 (예: `doc/git-convention`) |
 
 - `main`과 `dev`에는 직접 푸시하지 않고 Pull Request로 합칩니다.
-- `feature`, `fix` 브랜치는 `dev`로 합치고, `main`에는 `dev`에서만 합칩니다.
+- `feat`, `fix`, `doc` 브랜치는 `dev`로 합치고, `main`에는 `dev`에서만 합칩니다.
+- 브랜치 이름과 커밋 메시지 규칙은 [GIT_CONVENTION.md](GIT_CONVENTION.md)에도 정리되어 있습니다.
 - 같은 씬 파일을 여러 명이 동시에 수정하지 않도록 작업 전에 미리 공유합니다. (씬 충돌은 해결이 어렵습니다.)

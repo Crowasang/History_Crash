@@ -107,3 +107,25 @@ InitTestScene*.unity*
 
 # Auto-generated cache in Assets folder
 /[Aa]ssets/[Ss]ceneDependencyCache*
+
+# 팀원이 각자 설치하는 플러그인 (docs/PLUGIN_SETUP.md 참고)
+# NuGet 패키지: packages.config 기준으로 NuGetForUnity가 자동 복원
+/[Aa]ssets/Packages/
+/[Aa]ssets/Packages.meta
+# DOTween: 에셋 스토어에서 각자 임포트
+/[Aa]ssets/Plugins/Demigiant/
+/[Aa]ssets/Plugins/Demigiant.meta
+/[Aa]ssets/Plugins.meta
+# DOTween 설정 파일: 각자 DOTween Utility Panel에서 Setup 시 자동 생성되므로 커밋하지 않음
+/[Aa]ssets/[Rr]esources/DOTweenSettings.asset
+/[Aa]ssets/[Rr]esources/DOTweenSettings.asset.meta
+# Art: 폴더 자체는 공유하고, 안의 아트 에셋 파일들은 git으로 관리하지 않음 (각자 공유받아 배치)
+/[Aa]ssets/[Aa]rt/*
+!/[Aa]ssets/[Aa]rt/.gitkeep
+
+# Resources: 안의 파일들(바르코 에셋 프리팹 등)은 git으로 관리하지 않음 (나중에 Art로 옮겨서 따로 공유 예정)
+/[Aa]ssets/[Rr]esources/*
+
+# 개인용 에디터 툴(오브젝트 바닥 붙이기) - 저장소에 올리지 않음
+/Assets/Scripts/System/SnapToGround.cs
+/Assets/Scripts/System/SnapToGround.cs.meta

@@ -1,0 +1,117 @@
+using DG.Tweening;
+using UnityEngine;
+using UnityEngine.UI;
+using HistoryCrash.Player;
+
+namespace HistoryCrash.UI
+{
+    /// <summary>
+    /// 플레이어 HP 나침반 UI(화면 좌측 상단).
+    /// - Blender에서 렌더한 HP 0~5 상태 이미지 6장(Assets/Art/Resources/UI/PlayerHP/UI_PlayerHP_n.png)을 HP에 맞춰 바꿔 보여 준다.
+    /// - HP가 바뀌면 새 이미지가 짧게 겹쳐 나타나고(바늘이 넘어가며 루비가 꺼지는 느낌), 맞았을 때는 살짝 흔들린다.
+    /// - 씬에 따로 배치하지 않아도 GameManager에 플레이어 체력(Health)이 연결된 씬에서 스스로 만들어진다.
+    /// </summary>
+    public class PlayerHPCompassUI : MonoBehaviour
+    {
+        private const string TEX_PATH = "UI/PlayerHP/UI_PlayerHP_";
+        private const int MAX_STATE = 5;
+
+        // 플레이어 체력 (KDH 코어: GameManager.PlayerHealth = 플레이어의 Health)
+        private IHealthReadOnly _health;
+        // GameManager가 없는 씬(TEST_JMC 등)은 예전 JMC 체력으로
+        private PlayerHealth _legacy;
+
+        [Header("배치(기준 해상도 1920×1080)")]
+        [SerializeField] private float _size = 330f;
+        [SerializeField] private Vector2 _offset = Vector2.zero;
+
+        [Header("연출")]
+        [SerializeField, Tooltip("새 상태 이미지가 겹쳐 나타나는 시간")] private float _fadeTime = 0.25f;
+        [SerializeField, Tooltip("HP가 줄 때 흔들리는 시간")] private float _shakeTime = 0.3f;
+        [SerializeField, Tooltip("흔들림 크기(px)")] private float _shakeAmp = 6f;
+
+        private readonly Texture2D[] _states = new Texture2D[MAX_STATE + 1];
+        private RawImage _base, _over;
+        private RectTransform _root;
+        private int _shown = -1;
+        private Sequence _running;
+
+        // 메인메뉴 → 게임 씬처럼 씬이 바뀌어도 다시 만들어지게(AfterSceneLoad는 플레이를 시작할 때 한 번만 불림)
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void HookSceneLoaded() { UnityEngine.SceneManagement.SceneManager.sceneLoaded -= OnSceneLoadedAutoCreate; UnityEngine.SceneManagement.SceneManager.sceneLoaded += OnSceneLoadedAutoCreate; }
+        private static void OnSceneLoadedAutoCreate(UnityEngine.SceneManagement.Scene _s, UnityEngine.SceneManagement.LoadSceneMode _m) { AutoCreate(); }
+
+        // 씬이 열리면 플레이어 체력이 연결된 경우에만 HP UI를 하나 만든다(씬 저장 없이 동작)
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+        private static void AutoCreate()
+        {
+            if (FindFirstObjectByType<PlayerHPCompassUI>()) return;
+            bool _core = GameManager.Instance != null && GameManager.Instance.PlayerHealth != null;
+            if (!_core && !FindFirstObjectByType<PlayerHealth>()) return;
+            new GameObject("UI_PlayerHPCompass").AddComponent<PlayerHPCompassUI>();
+        }
+
+        private void Awake()
+        {
+            _health = GameManager.Instance != null ? GameManager.Instance.PlayerHealth : null;
+            if (_health == null) _legacy = FindFirstObjectByType<PlayerHealth>();
+            for (int _i = 0; _i <= MAX_STATE; _i++) _states[_i] = Resources.Load<Texture2D>(TEX_PATH + _i);
+            Build();
+        }
+
+        private void Build()
+        {
+            var _canvas = gameObject.AddComponent<Canvas>();
+            _canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            _canvas.sortingOrder = 10;
+            var _scaler = gameObject.AddComponent<CanvasScaler>();
+            _scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            _scaler.referenceResolution = new Vector2(1920f, 1080f);
+            _scaler.matchWidthOrHeight = 0.5f;
+
+            _root = new GameObject("Compass", typeof(RectTransform)).GetComponent<RectTransform>();
+            _root.SetParent(transform, false);
+            _root.anchorMin = _root.anchorMax = _root.pivot = new Vector2(0f, 1f);
+            _root.anchoredPosition = _offset;
+            _root.sizeDelta = new Vector2(_size, _size);
+            _base = MakeImage("Base");
+            _over = MakeImage("Over");
+            _over.color = new Color(1f, 1f, 1f, 0f);
+        }
+
+        private RawImage MakeImage(string _name)
+        {
+            var _img = new GameObject(_name, typeof(RectTransform)).AddComponent<RawImage>();
+            _img.rectTransform.SetParent(_root, false);
+            _img.rectTransform.anchorMin = Vector2.zero; _img.rectTransform.anchorMax = Vector2.one;
+            _img.rectTransform.offsetMin = _img.rectTransform.offsetMax = Vector2.zero;
+            _img.raycastTarget = false;
+            return _img;
+        }
+
+        private void Update()
+        {
+            if (_health == null && !_legacy) return;
+            int _hp = Mathf.Clamp(_health != null ? _health.CurrentHp.CurrentValue : _legacy.HP, 0, MAX_STATE);
+            if (_hp == _shown) return;
+            if (_shown < 0) { _base.texture = _states[_hp]; _shown = _hp; return; }   // 처음엔 연출 없이
+            bool _hurt = _hp < _shown;
+            _shown = _hp;
+            _running?.Kill();
+            _running = Change(_states[_hp], _hurt);
+        }
+
+        // 새 상태를 위에 겹쳐 서서히 드러낸 뒤 아래 이미지와 바꿈. 맞았으면 흔들림(DOTween, 게임이 멈춰도 흐르는 시간)
+        private Sequence Change(Texture2D _next, bool _hurt)
+        {
+            _root.anchoredPosition = _offset;
+            _over.texture = _next; _over.color = new Color(1f, 1f, 1f, 0f);
+            var _seq = DOTween.Sequence().SetUpdate(true).SetLink(gameObject);
+            _seq.Insert(0f, _over.DOFade(1f, Mathf.Max(0.01f, _fadeTime)).SetEase(Ease.Linear));
+            if (_hurt) _seq.Insert(0f, _root.DOShakeAnchorPos(_shakeTime, _shakeAmp, 30, 90f, false, true));
+            _seq.OnComplete(() => { _base.texture = _next; _over.color = new Color(1f, 1f, 1f, 0f); _root.anchoredPosition = _offset; });
+            _seq.OnKill(() => { if (_root) _root.anchoredPosition = _offset; });
+            return _seq;
+        }
+    }
+}
