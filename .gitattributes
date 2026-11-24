@@ -63,3 +63,7 @@
 *.7z           binary
 *.cubemap      binary
 *.lighting     binary
+
+# GitHub 언어 통계: Unity 창 배치 파일(.wlt)이 Wolfram 언어로 잘못 잡히지 않게 제외, TextMesh Pro 셰이더는 외부 패키지로 처리
+*.wlt linguist-detectable=false
+History_Crash/Assets/TextMesh[[:space:]]Pro/** linguist-vendored
