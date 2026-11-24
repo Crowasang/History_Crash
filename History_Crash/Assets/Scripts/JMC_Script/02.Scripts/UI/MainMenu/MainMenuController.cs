@@ -20,7 +20,7 @@ namespace HistoryCrash.UI
     /// - 핀: 그 스테이지에 한 번이라도 입장하면 꽂힘. 처음 꽂힐 때 한 번만 핀 꽂힘 영상 재생
     /// - Start·Continue → 메뉴가 사라지며 도감으로 줌인·책 펼침 → 펼친 도감에서 인트로(설정 언어에 따라 한국어/영어, 클릭·키로 건너뛰기) → 게임 씬
     /// - 상태는 PlayerPrefs 키를 읽기만 한다(HC_HasSave, HC_Entered_Egypt). 세이브 시스템이 생기면 이 키를 쓰면 바로 연동된다.
-    /// 영상·씬 데이터: Assets/Art/TEST_JMC/MainMenu/
+    /// 씬: Assets/Scenes/MainMenu.unity(메인메뉴 씬만 예외로 Scenes 폴더) / 영상·그림·소리 데이터: Assets/Art/TEST_JMC/MainMenu/
     /// </summary>
     public class MainMenuController : MonoBehaviour
     {
@@ -49,6 +49,13 @@ namespace HistoryCrash.UI
         [SerializeField, Tooltip("나타날 때 내려앉는 프레임(좌측 이전 장, 한국어)")] private Texture2D[] _ribbonBackKoDrape;
         [SerializeField, Tooltip("나타날 때 내려앉는 프레임(좌측 Back, 영어)")] private Texture2D[] _ribbonBackEnDrape;
         [SerializeField, Tooltip("리본이 표지·책상 위로 내려앉는 시간(초)")] private float _drapeTime = 0.45f;
+        [Header("사운드(VARCO Sound) — Assets/Art/TEST_JMC/MainMenu/Audio. 각 영상과 길이가 같아 영상과 함께 시작")]
+        [SerializeField, Tooltip("메인메뉴 배경(반복 영상과 함께 반복) — History Crash Main Menu")] private AudioClip _menuAudio;
+        [SerializeField, Tooltip("Start 후 도감 줌인·책 펼침 — Chronicles of the Magic Book")] private AudioClip _zoomAudio;
+        [SerializeField, Tooltip("스토리 시네마틱 — Mage Temple Portal Activation")] private AudioClip _introAudio;
+        [SerializeField, Tooltip("영상이 바뀔 때 앞 소리가 줄어드는 시간(초)")] private float _audioFade = 0.6f;
+        [SerializeField, Tooltip("스토리 시네마틱이 시작되면 함께 시작해 메인메뉴 씬 안에서 계속 반복 — Whispers of the ancient tale")] private AudioClip _storyLoop;
+
         [Header("흐름")]
         [SerializeField, Tooltip("인트로가 끝나면 불러올 씬 이름")] private string _gameScene = "TEST_JMC";
         [SerializeField, Tooltip("빌드 목록에 없을 때 에디터에서 불러올 씬 경로")] private string _gameScenePath = "Assets/Art/Scene/TEST_JMC.unity";
@@ -170,7 +177,12 @@ namespace HistoryCrash.UI
                 ShowBookmark(true);
                 while (_p.isPlaying && _p.frame < _hold)
                 {
-                    if (_skipIntro) { _p.frame = _hold; break; }          // 마지막 장면(나레이션이 다 쌓인 쪽)으로
+                    if (_skipIntro)                                        // 마지막 장면(나레이션이 다 쌓인 쪽)으로 — 소리도 같은 자리로
+                    {
+                        _p.frame = _hold;
+                        var _src = _as[_front]; if (_src.clip) _src.time = Mathf.Clamp(_hold / (float)_p.frameRate, 0f, _src.clip.length - 0.01f);
+                        break;
+                    }
                     yield return null;
                 }
                 _p.Pause();
@@ -189,6 +201,8 @@ namespace HistoryCrash.UI
                 ShowBookmark(false);
                 // 조작법 글자가 걷힘 → (게임 씬으로) 도감이 줌아웃되며 뒤로 게임 화면, 책이 덮여 아래로 내려감
                 yield return FadeGroup(_ctrlGroup, 1f, 0f, 0.45f);
+                foreach (var _src in _as) if (_src && _src.isPlaying) _src.DOFade(0f, 0.5f).SetUpdate(true).SetLink(gameObject);   // 게임으로 넘어가며 소리도 잦아듦
+                if (_loopSrc && _loopSrc.isPlaying) _loopSrc.DOFade(0f, 0.5f).SetUpdate(true).SetLink(gameObject);
                 BookToGameTransition.Create(_bookSpread);
                 LoadGameScene();
                 yield break;
@@ -380,6 +394,9 @@ namespace HistoryCrash.UI
         private void Update()
         {
             var _kb = Keyboard.current; var _ms = Mouse.current;
+            float _mv = MusicVolume();
+            for (int i = 0; i < 2; i++) if (_as[i] && _as[i].isPlaying && !DOTween.IsTweening(_as[i])) _as[i].volume = _mv;
+            if (_loopSrc && _loopSrc.isPlaying && !DOTween.IsTweening(_loopSrc)) _loopSrc.volume = _mv;
             // 설정창(게임용)은 닫힐 때 커서를 잠그므로, 메인메뉴에서는 다시 풀어 줌
             if (!PauseSettingsUI.IsOpen && Cursor.lockState != CursorLockMode.None) { Cursor.lockState = CursorLockMode.None; Cursor.visible = true; }
             if (_busy)
@@ -542,8 +559,36 @@ namespace HistoryCrash.UI
         }
 
         // ================= 영상 =================
+        private readonly AudioSource[] _as = new AudioSource[2];
+        private AudioSource _loopSrc;   // 시네마틱부터 반복되는 배경(메인메뉴 씬 안에서만)
+
+        /// <summary>배경음 음량(전체 × 음악). 메인메뉴 영상 소리는 영상과 맞춰 시작해야 해서 SoundManager 배경음 대신 전용 소리로 틀고 음량만 맞춤</summary>
+        private static float MusicVolume()
+        {
+            // 씬에 팀의 SoundManager가 있으면 그 음량(설정창이 바꾸는 값)을 그대로, 없으면 설정창 저장값
+            var _sm = SoundManager.Instance;
+            if (_sm) return _sm.MasterVolume * _sm.BgmVolume;
+            return PlayerPrefs.GetFloat("HC_Master", 100f) / 100f * PlayerPrefs.GetFloat("HC_Music", 70f) / 100f;
+        }
+
+        private AudioClip AudioFor(VideoClip _v)
+        {
+            if (!_v) return null;
+            if (_v == _loopNoPin || _v == _loopPin) return _menuAudio;
+            if (_v == _zoomNoPin || _v == _zoomPin) return _zoomAudio;
+            if (_v == _introKo || _v == _introEn) return _introAudio;
+            return null;   // 핀 꽂힘 등은 소리 없음(배경음은 이어짐)
+        }
+
         private void BuildVideoLayers()
         {
+            for (int i = 0; i < 2; i++)
+            {
+                _as[i] = gameObject.AddComponent<AudioSource>();
+                _as[i].playOnAwake = false; _as[i].spatialBlend = 0f; _as[i].volume = 0f;
+            }
+            _loopSrc = gameObject.AddComponent<AudioSource>();
+            _loopSrc.playOnAwake = false; _loopSrc.spatialBlend = 0f; _loopSrc.loop = true; _loopSrc.volume = 0f;
             var _cam = Camera.main;
             if (_cam) { _cam.clearFlags = CameraClearFlags.SolidColor; _cam.backgroundColor = Color.black; }
         }
@@ -558,6 +603,19 @@ namespace HistoryCrash.UI
             while (!_p.isPrepared) yield return null;
             _p.Play();
             while (_p.frame < 1) yield return null;            // 첫 장면이 실제로 그려진 뒤 보여 줌(검은 깜빡임 방지)
+            if ((_clip == _introKo || _clip == _introEn) && _storyLoop && !_loopSrc.isPlaying)
+            {
+                _loopSrc.clip = _storyLoop; _loopSrc.time = 0f; _loopSrc.volume = MusicVolume(); _loopSrc.Play();
+            }
+            var _a = AudioFor(_clip);
+            if (_a)
+            {
+                var _src = _as[_back]; _src.DOKill();
+                _src.clip = _a; _src.loop = _loop; _src.time = Mathf.Clamp((float)_p.time, 0f, _a.length - 0.01f);
+                _src.volume = MusicVolume(); _src.Play();
+                var _prev = _as[1 - _back];
+                if (_prev.isPlaying) _prev.DOFade(0f, _audioFade).SetUpdate(true).SetLink(gameObject).OnComplete(_prev.Stop);
+            }
             _vimg[_back].transform.SetAsLastSibling();
             int _old = _front; _front = _back;
             if (_fade > 0f) yield return Fade(_vimg[_back], 0f, 1f, _fade, true);
