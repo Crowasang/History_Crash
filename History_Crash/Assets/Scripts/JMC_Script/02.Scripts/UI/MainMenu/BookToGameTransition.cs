@@ -59,16 +59,30 @@ namespace HistoryCrash.UI
 
         private void OnEnable() { SceneManager.sceneLoaded += OnLoaded; }
         private void OnDisable() { SceneManager.sceneLoaded -= OnLoaded; }
-        private void OnLoaded(Scene _s, LoadSceneMode _m) { if (_started) return; _started = true; StartCoroutine(Play()); }
+        private float _prevScale = 1f;
+        private Behaviour[] _lockedInputs;
+
+        // sceneLoaded는 게임 씬의 Awake·OnEnable 뒤, Start 전에 불림 → 게임이 한 프레임도 흐르기 전에 멈춤
+        private void OnLoaded(Scene _s, LoadSceneMode _m)
+        {
+            if (_started) return; _started = true;
+            _prevScale = Time.timeScale > 0f ? Time.timeScale : 1f;
+            Time.timeScale = 0f;                                          // 책이 내려갈 때까지 게임은 멈춤(준비 대기·타이머도 이때까지 안 흐름)
+            // 시점(PlayerLook)은 시간이 멈춰도 마우스로 카메라 기준점을 바로 돌려서 연출 중에 카메라가 먼저 움직였음 → 전환 동안 꺼 둠
+            // 팀의 일시정지 입력(Esc → GameManager.Pause)도 꺼 둠(켜 두면 연출 중에 설정창이 열림)
+            var _looks = FindObjectsByType<PlayerLook>(FindObjectsSortMode.None);
+            var _pauses = FindObjectsByType<PauseInputHandler>(FindObjectsSortMode.None);
+            var _list = new System.Collections.Generic.List<Behaviour>();
+            foreach (var _b in _looks) if (_b.enabled) { _b.enabled = false; _list.Add(_b); }
+            foreach (var _b in _pauses) if (_b.enabled) { _b.enabled = false; _list.Add(_b); }
+            _lockedInputs = _list.ToArray();
+            Cursor.lockState = CursorLockMode.None; Cursor.visible = false;
+            StartCoroutine(Play());
+        }
 
         private IEnumerator Play()
         {
             for (int i = 0; i < 3; i++) yield return null;               // 게임 씬 첫 장면이 자리 잡도록
-            float _prevScale = Time.timeScale > 0f ? Time.timeScale : 1f;
-            Time.timeScale = 0f;                                          // 책이 내려갈 때까지 게임은 멈춤(설정창 닫힘과 같음)
-            // 팀의 일시정지 입력(Esc → GameManager.Pause)도 전환이 끝날 때까지 꺼 둠(켜 두면 연출 중에 설정창이 열림)
-            var _pauseInputs = FindObjectsByType<PauseInputHandler>(FindObjectsSortMode.None);
-            foreach (var _h in _pauseInputs) _h.enabled = false;
 
             // 연출은 DOTween 시퀀스(게임 시간이 멈춰 있으므로 SetUpdate(true))
             var _dimC = new Color(0.03f, 0.035f, 0.02f, DIM);
@@ -103,7 +117,7 @@ namespace HistoryCrash.UI
             Time.timeScale = _prevScale;
             Cursor.lockState = CursorLockMode.Locked; Cursor.visible = false;
             PauseSettingsUI.InputBlocked = false;    // 책이 다 내려간 이 순간부터 플레이어 조작 가능
-            foreach (var _h in _pauseInputs) if (_h) _h.enabled = true;
+            foreach (var _b in _lockedInputs) if (_b) _b.enabled = true;   // PlayerLook이 켜지며 커서도 다시 잠김
             Destroy(gameObject);
         }
 
