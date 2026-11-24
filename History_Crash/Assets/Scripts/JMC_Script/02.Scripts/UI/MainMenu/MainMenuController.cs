@@ -63,6 +63,23 @@ namespace HistoryCrash.UI
         [SerializeField, Tooltip("영상이 바뀔 때 겹쳐 넘어가는 시간(초)")] private float _crossFade = 0.35f;
         [SerializeField, Tooltip("테스트용: 메뉴·줌인을 건너뛰고 인트로 마지막 장면(책장 넘김 표시)부터 시작")] private bool _testFromIntroEnd;
 
+        [Header("튜토리얼(조작법 다음 장부터 한 장씩: 왼쪽 그림, 오른쪽 설명)")]
+        [SerializeField] private MainMenuTutorialPage[] _tutorialPages =
+        {
+            new MainMenuTutorialPage("UI/Tutorial/01_BossAttack", "파라오의 공격", "The Pharaoh's Attacks",
+                "파라오는 제단 위에서 다섯 가지\n패턴을 번갈아 쓰며 공격합니다.\n\n바닥에 문양이나 균열이 나타나면\n곧 공격이 떨어지는 자리입니다.\n달리거나 점프해서 피하세요.",
+                "The Pharaoh stands on the altar and attacks with five patterns in turn.\n\nA glowing mark or crack on the floor shows where an attack will land. Run or jump to dodge it."),
+            new MainMenuTutorialPage("UI/Tutorial/02_DroppedWeapon", "떨어진 무기", "Dropped Weapons",
+                "패턴이 끝날 무렵, 그 패턴의 무기가\n하늘에서 떨어져 바닥에 박힙니다.\n\n무기를 주우면 파라오의 공격을\n약하지만 따라 쓸 수 있습니다.\n무기는 잠시 뒤 사라집니다.",
+                "Near the end of each pattern, that pattern's weapon falls from the sky and sticks in the floor.\n\nPick it up to use a weaker version of the Pharaoh's attack. Weapons vanish after a while."),
+            new MainMenuTutorialPage("UI/Tutorial/03_ElementOrb", "속성 오브", "Element Orbs",
+                "미라는 불 · 물 · 전기 · 풀 중\n한 속성을 지니고, 같은 속성의\n오브를 떨어뜨립니다.\n\n주운 오브는 무기에 끼워지고,\n무기와 오브가 모두 있어야\n공격할 수 있습니다.\n한 번 공격하면 둘 다 사라집니다.",
+                "Each mummy has one element (Fire, Water, Electric or Grass) and drops orbs of that element.\n\nAn orb you pick up is set in your weapon. You need both a weapon and an orb to attack, and both are used up after one attack."),
+            new MainMenuTutorialPage("UI/Tutorial/04_ElementMummy", "속성 미라", "Element Mummies",
+                "미라의 몸과 머리 위 구슬의 색이\n그 미라의 속성입니다.\n\n오브와 같은 속성의 미라만\n쓰러뜨릴 수 있습니다.\n\n쓰러진 미라의 영혼이 파라오에게\n날아가 피해를 주고, 체력을 모두\n깎으면 피라미드가 정화됩니다.",
+                "The color of a mummy's body and the orb above its head shows its element.\n\nYou can only defeat mummies of the same element as your orb.\n\nEach defeated mummy's soul flies to the Pharaoh and deals damage. Bring its HP to zero to purify the pyramid."),
+        };
+
         [Header("배치(기준 해상도 1920×1080, 왼쪽 위가 0,0)")]
         [SerializeField] private Vector2 _titlePos = new Vector2(90f, 120f);
         [SerializeField] private float _titleSize = 120f;
@@ -99,6 +116,9 @@ namespace HistoryCrash.UI
         private CanvasGroup _ctrlGroup, _turnGroup;
         private TextMeshProUGUI _turnLabel;
         private RenderTexture _snapRT;
+        private readonly List<CanvasGroup> _pageGroups = new List<CanvasGroup>();   // 0 = 조작법, 1~ = 튜토리얼
+        private CanvasGroup _skipGroup;     // 조작법·튜토리얼 장 오른쪽 아래 '튜토리얼 건너뛰기'
+        private bool _skipTutorial;
 
         private void Awake()
         {
@@ -187,20 +207,33 @@ namespace HistoryCrash.UI
                 }
                 _p.Pause();
                 for (int i = 0; i < 3; i++) yield return null;           // 건너뛴 장면이 그려질 때까지
-                // 시네마틱이 끝나면 같은 책갈피가 '다음 장' 버튼으로 바뀜 → 누르면 조작법 페이지 → '모험 시작'
-                yield return WaitBookmark(1, false);
+                // 시네마틱이 끝나면 같은 책갈피가 '다음 장' 버튼으로 바뀜 → 조작법 → 튜토리얼 → 마지막 장에서 '모험 시작'
+                // 장 번호: 0 = 이야기, 1 = 조작법, 2~ = 튜토리얼. 우측 = 다음 장, 좌측 = 이전 장
+                int _page = 0, _lastPage = _pageGroups.Count;
+                _skipTutorial = false;
                 while (true)
                 {
-                    yield return TurnToControls();
-                    // 조작법 페이지: 우측 = 모험 시작, 좌측 = 이전 장(이야기 페이지로 되돌아감)
-                    yield return WaitBookmark(2, true);
-                    if (!_choseBack) break;
-                    yield return TurnBackToStory();
-                    yield return WaitBookmark(1, false);
+                    ShowSkip(_page >= 1 && _page < _lastPage);                   // 마지막 장은 '모험 시작'이 있으므로 건너뛰기 없음
+                    yield return WaitBookmark(_page == _lastPage ? 2 : 1, _page > 0);
+                    ShowSkip(false);
+                    if (_skipTutorial) break;                                    // 남은 장을 건너뛰고 바로 게임으로
+                    if (_choseBack)
+                    {
+                        if (_page == 1) yield return TurnBackToStory();
+                        else yield return TurnBetween(_pageGroups[_page - 1], _pageGroups[_page - 2], false);
+                        _page--;
+                    }
+                    else if (_page == _lastPage) break;
+                    else
+                    {
+                        if (_page == 0) yield return TurnToControls();
+                        else yield return TurnBetween(_pageGroups[_page - 1], _pageGroups[_page], true);
+                        _page++;
+                    }
                 }
                 ShowBookmark(false);
-                // 조작법 글자가 걷힘 → (게임 씬으로) 도감이 줌아웃되며 뒤로 게임 화면, 책이 덮여 아래로 내려감
-                yield return FadeGroup(_ctrlGroup, 1f, 0f, 0.45f);
+                // 지금 장 글자가 걷힘 → (게임 씬으로) 도감이 줌아웃되며 뒤로 게임 화면, 책이 덮여 아래로 내려감
+                yield return FadeGroup(_pageGroups[_page - 1], 1f, 0f, 0.45f);
                 foreach (var _src in _as) if (_src && _src.isPlaying) _src.DOFade(0f, 0.5f).SetUpdate(true).SetLink(gameObject);   // 게임으로 넘어가며 소리도 잦아듦
                 if (_loopSrc && _loopSrc.isPlaying) _loopSrc.DOFade(0f, 0.5f).SetUpdate(true).SetLink(gameObject);
                 BookToGameTransition.Create(_bookSpread);
@@ -281,6 +314,29 @@ namespace HistoryCrash.UI
             _oldRight.gameObject.SetActive(false); _flipFront.gameObject.SetActive(false); _flipBack.gameObject.SetActive(false);
         }
 
+        /// <summary>빈 도감 펼침면끼리 책장을 넘김(조작법 ↔ 튜토리얼, 튜토리얼끼리). 글자·그림은 넘기기 전에 걷히고 넘긴 뒤 번져 나타남</summary>
+        // 튜토리얼은 빠르게 넘겨 볼 수 있게 이야기·조작법 넘김보다 짧게
+        private const float QUICK_FADE_OUT = 0.15f, QUICK_FLIP_HALF = 0.28f, QUICK_FADE_IN = 0.3f;
+
+        private IEnumerator TurnBetween(CanvasGroup _from, CanvasGroup _to, bool _forward)
+        {
+            yield return FadeGroup(_from, 1f, 0f, QUICK_FADE_OUT);
+            _newSpread.texture = _bookSpread; _flipFront.texture = _bookSpread; _flipBack.texture = _bookSpread;
+            _oldLeft.gameObject.SetActive(false); _oldRight.gameObject.SetActive(false);
+            // 앞으로: 오른쪽 장이 책등 쪽으로 눕고 왼쪽에 내려앉음 / 뒤로: 반대
+            var _first = _forward ? _flipFront : _flipBack;
+            var _second = _forward ? _flipBack : _flipFront;
+            _first.gameObject.SetActive(true); _second.gameObject.SetActive(false);
+            SetFlip(_first, 1f, 1f); SetFlip(_second, 0f, 1f);
+            var _flip = DOTween.Sequence().SetUpdate(true).SetLink(gameObject);
+            _flip.Append(DOVirtual.Float(1f, 0f, QUICK_FLIP_HALF, _k => SetFlip(_first, _k, Mathf.Lerp(0.55f, 1f, _k))).SetEase(Ease.InSine));
+            _flip.AppendCallback(() => { _first.gameObject.SetActive(false); _second.gameObject.SetActive(true); });
+            _flip.Append(DOVirtual.Float(0f, 1f, QUICK_FLIP_HALF, _k => SetFlip(_second, _k, Mathf.Lerp(0.55f, 1f, _k))).SetEase(Ease.OutSine));
+            yield return _flip.WaitForCompletion();
+            _second.gameObject.SetActive(false);
+            yield return FadeGroup(_to, 0f, 1f, QUICK_FADE_IN);
+        }
+
         private static void SetFlip(RawImage _img, float _scaleX, float _shade)
         {
             _img.rectTransform.localScale = new Vector3(Mathf.Max(0.0001f, _scaleX), 1f, 1f);
@@ -310,6 +366,17 @@ namespace HistoryCrash.UI
             int[] _left = { 0, 1, 2, 5, 6, 7 }, _right = { 3, 4, 8, 9, 10, 11 };
             ControlRows(_cr, _left, 372f, 802f, _ko);
             ControlRows(_cr, _right, 1123f, 1553f, _ko);
+            _pageGroups.Clear(); _pageGroups.Add(_ctrlGroup);
+            if (_tutorialPages != null)
+                for (int i = 0; i < _tutorialPages.Length; i++) _pageGroups.Add(BuildTutorialPage(_book, _tutorialPages[i], i));
+
+            // 튜토리얼 건너뛰기(오른쪽 페이지 아래 잉크 글씨, 누르거나 Esc)
+            _skipGroup = new GameObject("TutorialSkip", typeof(RectTransform), typeof(CanvasGroup)).GetComponent<CanvasGroup>();
+            var _sr = (RectTransform)_skipGroup.transform; _sr.SetParent(_book, false); Stretch(_sr);
+            var _skip = BookText(_sr, GameLanguage.T("튜토리얼 건너뛰기 (Esc)  »", "Skip tutorial (Esc)  »"), new Vector2(1590f, 955f), 24f, TextAlignmentOptions.MidlineRight, 420f);
+            ApplyFont(_skip, 24f); _skip.raycastTarget = true;
+            _skip.gameObject.AddComponent<MainMenuBookmark>().Clicked = SkipTutorial;
+            ShowSkip(false);
 
             // 넘김 표시(우측 페이지 하단)
             _turnGroup = new GameObject("PageTurnHint", typeof(RectTransform), typeof(CanvasGroup)).GetComponent<CanvasGroup>();
@@ -317,6 +384,46 @@ namespace HistoryCrash.UI
             _turnLabel = BookText(_tr, "", new Vector2(1590f, 955f), 26f, TextAlignmentOptions.MidlineRight, 400f);
             _turnGroup.alpha = 0f; _turnGroup.gameObject.SetActive(false);
             _book.gameObject.SetActive(false);
+        }
+
+        // 튜토리얼 한 장: 조작법 페이지와 같은 칸(왼쪽 372~802, 오른쪽 1123~1553, 제목 줄 242)에 맞춤
+        private static readonly Rect TUTORIAL_IMAGE_PX = new Rect(362f, 290f, 450f, 540f);   // 왼쪽 페이지 그림 칸(왼쪽 위 0,0)
+        private const float TUTORIAL_FRAME = 4f;                                               // 그림 둘레 잉크 테두리 두께
+
+        private CanvasGroup BuildTutorialPage(RectTransform _parent, MainMenuTutorialPage _page, int _index)
+        {
+            var _group = new GameObject("Tutorial_" + (_index + 1), typeof(RectTransform), typeof(CanvasGroup)).GetComponent<CanvasGroup>();
+            var _r = (RectTransform)_group.transform; _r.SetParent(_parent, false); Stretch(_r);
+            _group.alpha = 0f; _group.interactable = _group.blocksRaycasts = false;
+
+            // 왼쪽: 그림(비율 유지해 칸 안에 맞춤) + 잉크 테두리
+            var _tex = string.IsNullOrEmpty(_page.ImagePath) ? null : Resources.Load<Texture2D>(_page.ImagePath);
+            if (_tex)
+            {
+                var _box = new GameObject("ImageBox", typeof(RectTransform)).GetComponent<RectTransform>();
+                _box.SetParent(_r, false);
+                _box.anchorMin = new Vector2(TUTORIAL_IMAGE_PX.xMin / 1920f, 1f - TUTORIAL_IMAGE_PX.yMax / 1080f);
+                _box.anchorMax = new Vector2(TUTORIAL_IMAGE_PX.xMax / 1920f, 1f - TUTORIAL_IMAGE_PX.yMin / 1080f);
+                _box.offsetMin = _box.offsetMax = Vector2.zero;
+                var _frame = new GameObject("Frame", typeof(RectTransform), typeof(Image), typeof(AspectRatioFitter));
+                _frame.transform.SetParent(_box, false);
+                var _fit = _frame.GetComponent<AspectRatioFitter>(); _fit.aspectMode = AspectRatioFitter.AspectMode.FitInParent; _fit.aspectRatio = (float)_tex.width / _tex.height;
+                var _fi = _frame.GetComponent<Image>(); _fi.color = new Color(INK.r, INK.g, INK.b, 0.55f); _fi.raycastTarget = false;
+                var _img = Raw("Image", (RectTransform)_frame.transform, new Rect(0f, 0f, 1f, 1f), Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f));
+                _img.rectTransform.offsetMin = new Vector2(TUTORIAL_FRAME, TUTORIAL_FRAME); _img.rectTransform.offsetMax = new Vector2(-TUTORIAL_FRAME, -TUTORIAL_FRAME);
+                _img.texture = _tex;
+            }
+            else Debug.LogWarning($"[MainMenu] 튜토리얼 그림을 찾지 못했습니다: Resources/{_page.ImagePath}");
+
+            // 오른쪽: 제목 + 설명(줄바꿈) + 쪽 번호
+            PageTitle(_r, _page.Title, 1085f);
+            var _body = BookText(_r, _page.Body, new Vector2(1123f, 345f), 28f, TextAlignmentOptions.TopLeft, 430f);
+            _body.rectTransform.pivot = new Vector2(0f, 1f); _body.rectTransform.sizeDelta = new Vector2(430f, 560f);
+            _body.textWrappingMode = TextWrappingModes.Normal; _body.lineSpacing = 12f;
+            ApplyFont(_body, 28f);
+            var _num = BookText(_r, $"{_index + 1} / {_tutorialPages.Length}", new Vector2(1338f, 880f), 22f, TextAlignmentOptions.Center, 200f);
+            _num.color = new Color(INK.r, INK.g, INK.b, 0.6f);
+            return _group;
         }
 
         private void PageTitle(RectTransform _p, string _s, float _x)
@@ -416,6 +523,16 @@ namespace HistoryCrash.UI
         /// <summary>우측 책갈피: 시네마틱 중이면 건너뛰기, 끝난 뒤면 다음 장/모험 시작</summary>
         public void SkipIntro() { if (_bookmarkGroup && _bookmarkGroup.interactable) { _skipIntro = true; _bookmarkClicked = true; _choseBack = false; } }
 
+        /// <summary>튜토리얼 건너뛰기: 남은 장을 넘기지 않고 바로 게임 씬으로</summary>
+        public void SkipTutorial() { if (_skipGroup && _skipGroup.interactable) { _skipTutorial = true; _bookmarkClicked = true; _choseBack = false; } }
+
+        private void ShowSkip(bool _on)
+        {
+            if (!_skipGroup) return;
+            _skipGroup.alpha = _on ? 1f : 0f;
+            _skipGroup.interactable = _skipGroup.blocksRaycasts = _on;
+        }
+
         /// <summary>좌측 책갈피: 앞 장(이야기 페이지)으로 되돌아감</summary>
         public void GoBackPage() { if (_backGroup && _backGroup.interactable) { _bookmarkClicked = true; _choseBack = true; } }
 
@@ -433,6 +550,7 @@ namespace HistoryCrash.UI
                 var _kb = Keyboard.current;
                 if (_kb != null && (_kb.enterKey.wasPressedThisFrame || _kb.numpadEnterKey.wasPressedThisFrame || _kb.spaceKey.wasPressedThisFrame || _kb.rightArrowKey.wasPressedThisFrame)) { _choseBack = false; break; }
                 if (_allowBack && _kb != null && _kb.leftArrowKey.wasPressedThisFrame) { _choseBack = true; break; }
+                if (_kb != null && _kb.escapeKey.wasPressedThisFrame && _skipGroup && _skipGroup.interactable) { _skipTutorial = true; _choseBack = false; break; }
                 yield return null;
             }
             _bookmarkClicked = false;
