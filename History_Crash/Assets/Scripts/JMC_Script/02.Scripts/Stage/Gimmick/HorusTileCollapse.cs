@@ -23,6 +23,7 @@ namespace HistoryCrash.Stage
         [Header("참조")]
         [SerializeField, FormerlySerializedAs("grid")] private TileGrid _grid;
         [SerializeField, FormerlySerializedAs("floorRoot"), Tooltip("Temple_impe/Floor")] private Transform _floorRoot;
+        [SerializeField, Tooltip("플레이어가 못 가는 구역(WallClimbBlockers의 투명 상자). 중심이 이 안에 있는 타일은 무너지지 않음")] private Collider[] _unreachableAreas;
 
         [Header("주기(초)")]
         [SerializeField, FormerlySerializedAs("period")] private float _period = 15f;
@@ -92,6 +93,7 @@ namespace HistoryCrash.Stage
                 var _r = _t.GetComponentInChildren<Renderer>();
                 var _mf = _r ? _r.GetComponent<MeshFilter>() : null;
                 if (!_r || !_mf || !_mf.sharedMesh) continue;
+                if (IsUnreachable(_r.bounds.center)) continue;   // 석상·제단 사이처럼 못 가는 곳은 무너뜨리지 않음
                 string _n = _mf.sharedMesh.name;              // Tile_Crack_A_impe
                 int _k = _n.IndexOf("Tile_Crack_");
                 if (_k < 0 || _n.Length <= _k + 11) continue;
@@ -108,6 +110,19 @@ namespace HistoryCrash.Stage
         }
 
         private void Start() { StartCoroutine(Cycle()); }
+
+        // 위에서 봤을 때 못 가는 구역 상자 안에 있는 점인지
+        private bool IsUnreachable(Vector3 _p)
+        {
+            if (_unreachableAreas == null) return false;
+            foreach (var _area in _unreachableAreas)
+            {
+                if (!_area) continue;
+                var _b = _area.bounds;
+                if (_p.x > _b.min.x && _p.x < _b.max.x && _p.z > _b.min.z && _p.z < _b.max.z) return true;
+            }
+            return false;
+        }
 
         // ---------- 공용 재질/메시 ----------
         private void CreateSharedVisuals()
