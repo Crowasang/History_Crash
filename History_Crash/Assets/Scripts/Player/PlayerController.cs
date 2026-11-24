@@ -1,4 +1,6 @@
 using System;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -12,7 +14,7 @@ using UnityEngine.InputSystem;
 /// 같은 오브젝트에 ILookDirection을 구현한 컴포넌트가 있어야 합니다.
 /// </summary>
 [RequireComponent(typeof(Rigidbody), typeof(CapsuleCollider))]
-public class PlayerController : MonoBehaviour, IJumpState, IPlayerMotion, ISpeedModifier, IPlayerTeleport, IMovementLock
+public class PlayerController : MonoBehaviour, IJumpState, IPlayerMotion, ISpeedModifier, IPlayerTeleport, IMovementLock, IKnockback
 {
     /// <summary>이 높이(m) 이상 떠 있으면 점프 회피로 판정 (기획 v19)</summary>
     public const float JUMP_DODGE_HEIGHT = 0.45f;
@@ -211,6 +213,31 @@ public class PlayerController : MonoBehaviour, IJumpState, IPlayerMotion, ISpeed
         _isAirborne = true;
         OnJumped?.Invoke();
         return true;
+    }
+
+    /// <summary>
+    /// 수평으로 짧게 밀려납니다(피격 넉백). 밀리는 동안 이동 입력은 잠기고,
+    /// 끝나면 수평 속도를 멈춘 뒤 누르고 있던 이동 입력이 다시 적용됩니다.
+    /// </summary>
+    public void Knockback(Vector3 _direction, float _distance, float _duration)
+    {
+        _direction.y = 0f;
+        if (_direction.sqrMagnitude < 0.0001f || _distance <= 0f || _duration <= 0f) return;
+
+        KnockbackAsync(_direction.normalized * (_distance / _duration), _duration, destroyCancellationToken).Forget();
+    }
+
+    private async UniTaskVoid KnockbackAsync(Vector3 _velocity, float _duration, CancellationToken _token)
+    {
+        Lock();
+        _rb.linearVelocity = new Vector3(_velocity.x, _rb.linearVelocity.y, _velocity.z);
+
+        bool _canceled = await UniTask.Delay(TimeSpan.FromSeconds(_duration), cancellationToken: _token).SuppressCancellationThrow();
+        if (_canceled) return;
+
+        // 정해진 거리만 밀리고 멈춤(미끄러지지 않게)
+        _rb.linearVelocity = new Vector3(0f, _rb.linearVelocity.y, 0f);
+        Unlock();
     }
 
     // 바닥에 닿는 순간 착지 처리 (매 프레임 확인하지 않음)
