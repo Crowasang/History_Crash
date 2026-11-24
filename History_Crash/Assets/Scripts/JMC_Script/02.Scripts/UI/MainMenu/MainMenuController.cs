@@ -387,7 +387,8 @@ namespace HistoryCrash.UI
         }
 
         // 튜토리얼 한 장: 조작법 페이지와 같은 칸(왼쪽 372~802, 오른쪽 1123~1553, 제목 줄 242)에 맞춤
-        private static readonly Rect TUTORIAL_IMAGE_PX = new Rect(362f, 290f, 450f, 540f);   // 왼쪽 페이지 그림 칸(왼쪽 위 0,0)
+        // 왼쪽 페이지 그림 칸(왼쪽 위 0,0): 도감에 그려진 안쪽 틀(x 327~843, y 315~908) 안에 여백 20px을 두고 가운데
+        private static readonly Rect TUTORIAL_IMAGE_PX = new Rect(347f, 335f, 476f, 553f);
         private const float TUTORIAL_FRAME = 4f;                                               // 그림 둘레 잉크 테두리 두께
 
         private CanvasGroup BuildTutorialPage(RectTransform _parent, MainMenuTutorialPage _page, int _index)
