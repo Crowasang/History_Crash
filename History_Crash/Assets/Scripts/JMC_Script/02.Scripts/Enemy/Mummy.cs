@@ -74,7 +74,6 @@ namespace HistoryCrash.Enemy
         public bool IsAlive { get; private set; } = true;
         public bool Active { get; private set; }
         private float _nextOrb;
-        private MaterialPropertyBlock _mpb;
 
         private static readonly System.Collections.Generic.List<Mummy> _alive = new System.Collections.Generic.List<Mummy>();
         public static System.Collections.Generic.List<Mummy> Alive => _alive;
@@ -90,56 +89,38 @@ namespace HistoryCrash.Enemy
 
         private void ApplyElementLook()
         {
-            if (!_shellRenderer) return;
-            _mpb = _mpb ?? new MaterialPropertyBlock();
-            _shellRenderer.GetPropertyBlock(_mpb);
-            // 주변을 비추는 광원 없이, 머미 자신에게만 속성색을 입힌다
             Color _c = ElementInfo.Color(_element);
-            _mpb.SetColor("_EmissionColor", _c * 5f);
-            _mpb.SetColor("_BaseColor", new Color(_c.r, _c.g, _c.b, 0.42f));
-            _shellRenderer.SetPropertyBlock(_mpb);
-            // 붕대(몸)도 속성색으로 물들임
+            // 미라 모습은 속성과 관계없이 기본형 그대로(속성색 에너지 껍질·불티·머리 위 구슬 없음) — 속성색은 몸 테두리(아웃라인)로만 표시
+            if (_shellRenderer) _shellRenderer.enabled = false;
+            AddOutline(_c);
+        }
+
+        [Header("속성 아웃라인")]
+        [SerializeField, Tooltip("몸 테두리 두께(m)")] private float _outlineWidth = 0.012f;
+        [SerializeField, Tooltip("테두리 색 밝기(1보다 작으면 속성색보다 어둡게, 1보다 크면 블룸으로 빛남)")] private float _outlineIntensity = 0.7f;
+        private const string OUTLINE_SHADER = "HistoryCrash_Outline";   // Assets/Shaders/Resources/
+        private static Shader _outlineShader;
+        private Material _outlineMat;
+
+        // 몸 렌더러의 머티리얼 칸 뒤에 아웃라인 머티리얼을 하나 더 붙임(원래 머티리얼은 그대로)
+        private void AddOutline(Color _c)
+        {
+            if (!_outlineShader) _outlineShader = Resources.Load<Shader>(OUTLINE_SHADER);
+            if (!_outlineShader) { Debug.LogWarning("[Mummy] 아웃라인 셰이더를 찾지 못했습니다: Resources/" + OUTLINE_SHADER, this); return; }
+            _outlineMat = new Material(_outlineShader) { name = "MummyOutline_" + ElementInfo.Name(_element) };
+            _outlineMat.SetColor("_OutlineColor", _c * _outlineIntensity);
+            _outlineMat.SetFloat("_OutlineWidth", _outlineWidth);
             foreach (var _r in GetComponentsInChildren<SkinnedMeshRenderer>())
             {
                 if (_r == _shellRenderer) continue;
-                var _b = new MaterialPropertyBlock(); _r.GetPropertyBlock(_b);
-                _b.SetColor("_BaseColor", Color.Lerp(Color.white, _c, 0.45f));
-                _r.SetPropertyBlock(_b);
+                var _mats = _r.sharedMaterials;
+                System.Array.Resize(ref _mats, _mats.Length + 1);
+                _mats[_mats.Length - 1] = _outlineMat;
+                _r.sharedMaterials = _mats;
             }
-            // 몸 주위에서 피어오르는 속성 불티
-            var _aura = ElementFx.Trail(_element, transform, 0.11f, 35f);
-            _aura.transform.localPosition = new Vector3(0, 0.45f, 0);
-            var _am = _aura.main; _am.gravityModifier = -0.35f; _am.startLifetime = new ParticleSystem.MinMaxCurve(0.5f, 0.9f);
-            var _ash = _aura.shape; _ash.radius = 0.22f;
-            // 머리 위 속성 표식(작게 빛나는 구슬)
-            _head = FindDeep(transform, "Head");
-            _marker = GameObject.CreatePrimitive(PrimitiveType.Sphere).transform;
-            Destroy(_marker.GetComponent<Collider>());
-            _marker.name = "ElementMarker"; _marker.SetParent(transform, true);
-            _marker.localScale = Vector3.one * _markerSize;
-            _marker.GetComponent<Renderer>().sharedMaterial = ElementFx.GlowMat(_element, 6f);
-            _marker.GetComponent<Renderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         }
 
-        [Header("속성 표시")]
-        [SerializeField, FormerlySerializedAs("markerSize")] private float _markerSize = 0.09f;
-        [SerializeField, FormerlySerializedAs("markerHeight")] private float _markerHeight = 0.28f;
-        private Transform _head, _marker;
-
-        private static Transform FindDeep(Transform _t, string _name)
-        {
-            if (_t.name == _name) return _t;
-            foreach (Transform _c in _t) { var _r = FindDeep(_c, _name); if (_r) return _r; }
-            return null;
-        }
-
-        private void LateUpdate()
-        {
-            if (!_marker) return;
-            Vector3 _basePos = _head ? _head.position : transform.position + Vector3.up * 1f;
-            _marker.position = _basePos + Vector3.up * (_markerHeight + Mathf.Sin(Time.time * 3f + GetInstanceID()) * 0.03f);
-            if (!IsAlive) _marker.gameObject.SetActive(false);
-        }
+        private void OnDestroy() { if (_outlineMat) Destroy(_outlineMat); }
 
         /// <summary>소환 연출(바닥에서 솟아오름)이 끝나면 호출</summary>
         public void Activate()
