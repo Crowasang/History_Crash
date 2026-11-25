@@ -17,6 +17,9 @@ namespace HistoryCrash.UI
         private const float SIZE = 91f;   // 1920×1080 기준(px)
         private static readonly Color NO_ORB = new Color(0.725f, 0.651f, 0.486f), NO_ORB_LIGHT = new Color(0.945f, 0.902f, 0.784f);
 
+        // TODO: 새 조준점 UI를 만들 때까지 화면 가운데 에임을 숨김. 다시 보이게 하려면 true (Claude)
+        private static readonly bool ENABLED = false;
+
         private PlayerLoadout _loadout;
         private Canvas _canvas;
         private RawImage _main, _light;
@@ -27,6 +30,7 @@ namespace HistoryCrash.UI
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void AutoCreate()
         {
+            if (!ENABLED) return;
             if (System.Array.IndexOf(BossIntroCutscene.SCENES, SceneManager.GetActiveScene().name) < 0) return;
             if (FindFirstObjectByType<AimReticleUI>() || !FindFirstObjectByType<PlayerLoadout>()) return;
             new GameObject("UI_AimReticle").AddComponent<AimReticleUI>();

@@ -35,6 +35,7 @@ namespace HistoryCrash.Sound
             { "Pharaoh_Attacked", (0.75f, Space.Half) },
             // 미라
             { "Mummy_Walk", (0.45f, Space.World) }, { "Mummy_Death", (1.00f, Space.World) },
+            { "Mummy_SoulAbsorb", (1.00f, Space.Half) }, { "Mummy_SoulFly", (1.00f, Space.Half) }, { "Mummy_SoulHit", (1.00f, Space.Half) },
             // 플레이어
             { "Player_Cast", (0.65f, Space.Flat) }, { "Player_AttackA", (0.75f, Space.Flat) }, { "Player_AttackB", (0.90f, Space.World) },
             { "Player_AttackC", (0.75f, Space.Flat) }, { "Player_AttackD", (0.70f, Space.Flat) }, { "Player_AttackE", (0.75f, Space.Flat) },

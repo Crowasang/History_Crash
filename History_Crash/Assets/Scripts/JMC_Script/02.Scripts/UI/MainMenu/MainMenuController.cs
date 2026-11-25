@@ -84,11 +84,12 @@ namespace HistoryCrash.UI
         [SerializeField] private Vector2 _titlePos = new Vector2(90f, 120f);
         [SerializeField] private float _titleSize = 120f;
         [SerializeField] private Vector2 _menuPos = new Vector2(1560f, 470f);
-        [SerializeField] private float _menuSize = 46f;
+        [SerializeField] private float _menuSize = 56f;
 
         private static readonly Color FACE = new Color32(226, 206, 166, 255);
-        private static readonly Color EDGE = new Color32(60, 36, 18, 200);
-        private static readonly Color RUBY = new Color32(150, 26, 22, 230);
+        private static readonly Color FACE_SEL = new Color32(255, 232, 170, 255);   // 고른 메뉴(더 밝은 금빛)
+        private static readonly Color EDGE = new Color32(40, 22, 8, 230);           // 촛불 빛 받은 책상 위에서도 글자 테두리가 보이게 진하게
+        private static readonly Color RUBY = new Color32(170, 28, 22, 255);
 
         private readonly List<string> _items = new List<string>();
         private readonly List<TextMeshProUGUI> _itemTexts = new List<TextMeshProUGUI>();
@@ -247,7 +248,25 @@ namespace HistoryCrash.UI
 
         // ================= 책장 넘김 · 조작법 페이지 =================
         private const int HOLD_BEFORE_END = 16;                 // 인트로 영상은 끝 12프레임이 암전 → 그 직전에 멈춤
-        private static readonly Color INK = new Color32(44, 26, 10, 235);
+        private static readonly Color INK = new Color32(30, 16, 4, 255);   // 밝게 보정한 종이 위에서 잘 읽히게 진하고 불투명하게
+
+        // ---- 도감 종이를 밝은 양피지로 보정(스토리 영상·조작법·튜토리얼 바탕). ESC 설정창 도감과 같은 색감 ----
+        private Material _parchment, _parchVideo;
+        private Material Parchment()
+        {
+            if (_parchment) return _parchment;
+            var _sh = Resources.Load<Shader>("HistoryCrash_UIParchment");   // Assets/Shaders/Resources/
+            if (_sh) _parchment = new Material(_sh) { name = "MainMenu_Parchment" };
+            return _parchment;
+        }
+
+        // ---- 책장 넘길 때 소리 ----
+        private AudioClip _pageClip;
+        private void PlayPageTurn()
+        {
+            if (!_pageClip) _pageClip = Resources.Load<AudioClip>("UI/Settings/UI_PageTurn");
+            if (_pageClip && SoundManager.Instance) SoundManager.Instance.PlaySfx(_pageClip, 0.9f);
+        }
         private const float SPINE_X = 960f;                     // 펼친 책의 가운데(책등) — 영상·책 그림 기준 px
 
         /// <summary>우측 페이지 하단에 넘김 표시(살짝 숨 쉬듯 깜빡임)를 띄우고 클릭·키를 기다린다</summary>
@@ -284,6 +303,7 @@ namespace HistoryCrash.UI
             SetFlip(_flipFront, 1f, 1f); SetFlip(_flipBack, 0f, 1f);
             _flipBack.gameObject.SetActive(false);
             // 책장 넘김(DOTween): 앞면이 책등 쪽으로 눕고(가속) → 뒷면이 왼쪽으로 내려앉음(감속)
+            PlayPageTurn();
             var _flip = DOTween.Sequence().SetUpdate(true).SetLink(gameObject);
             _flip.Append(DOVirtual.Float(1f, 0f, 0.425f, _k => SetFlip(_flipFront, _k, Mathf.Lerp(0.55f, 1f, _k))).SetEase(Ease.InSine));
             _flip.AppendCallback(() => { _flipFront.gameObject.SetActive(false); _flipBack.gameObject.SetActive(true); });
@@ -306,6 +326,7 @@ namespace HistoryCrash.UI
             _flipBack.texture = _bookSpread; _flipFront.texture = _snapRT;
             _flipBack.gameObject.SetActive(true); _flipFront.gameObject.SetActive(false);
             SetFlip(_flipBack, 1f, 1f); SetFlip(_flipFront, 0f, 1f);
+            PlayPageTurn();
             var _flip = DOTween.Sequence().SetUpdate(true).SetLink(gameObject);
             _flip.Append(DOVirtual.Float(1f, 0f, 0.425f, _k => SetFlip(_flipBack, _k, Mathf.Lerp(0.55f, 1f, _k))).SetEase(Ease.InSine));
             _flip.AppendCallback(() => { _flipBack.gameObject.SetActive(false); _flipFront.gameObject.SetActive(true); });
@@ -328,6 +349,7 @@ namespace HistoryCrash.UI
             var _second = _forward ? _flipBack : _flipFront;
             _first.gameObject.SetActive(true); _second.gameObject.SetActive(false);
             SetFlip(_first, 1f, 1f); SetFlip(_second, 0f, 1f);
+            PlayPageTurn();
             var _flip = DOTween.Sequence().SetUpdate(true).SetLink(gameObject);
             _flip.Append(DOVirtual.Float(1f, 0f, QUICK_FLIP_HALF, _k => SetFlip(_first, _k, Mathf.Lerp(0.55f, 1f, _k))).SetEase(Ease.InSine));
             _flip.AppendCallback(() => { _first.gameObject.SetActive(false); _second.gameObject.SetActive(true); });
@@ -356,6 +378,8 @@ namespace HistoryCrash.UI
             _oldRight.gameObject.SetActive(false);
             _flipFront = Raw("FlipFront", _book, new Rect(0.5f, 0f, 0.5f, 1f), new Vector2(0.5f, 0f), new Vector2(1f, 1f), new Vector2(0f, 0.5f));   // 책등(왼쪽 끝)을 축으로
             _flipBack = Raw("FlipBack", _book, new Rect(0f, 0f, 0.5f, 1f), new Vector2(0f, 0f), new Vector2(0.5f, 1f), new Vector2(1f, 0.5f));      // 책등(오른쪽 끝)을 축으로
+            // 펼침면(빈 도감·이야기 마지막 장면 사본)은 모두 밝은 양피지로 보정해서 보여 줌
+            foreach (var _pg in new[] { _newSpread, _oldLeft, _oldRight, _flipFront, _flipBack }) _pg.material = Parchment();
 
             // 조작법: 왼쪽 = 이동·시점, 오른쪽 = 전투·기타 (목록은 ESC 설정창 Controls와 같은 PauseSettingsUI.CONTROLS)
             _ctrlGroup = new GameObject("Controls", typeof(RectTransform), typeof(CanvasGroup)).GetComponent<CanvasGroup>();
@@ -373,9 +397,9 @@ namespace HistoryCrash.UI
             // 튜토리얼 건너뛰기(오른쪽 페이지 아래 잉크 글씨, 누르거나 Esc)
             _skipGroup = new GameObject("TutorialSkip", typeof(RectTransform), typeof(CanvasGroup)).GetComponent<CanvasGroup>();
             var _sr = (RectTransform)_skipGroup.transform; _sr.SetParent(_book, false); Stretch(_sr);
-            var _skip = BookText(_sr, GameLanguage.T("튜토리얼 건너뛰기 (Esc)  »", "Skip tutorial (Esc)  »"), new Vector2(1590f, 955f), 24f, TextAlignmentOptions.MidlineRight, 420f);
-            ApplyFont(_skip, 24f); _skip.raycastTarget = true;
-            _skip.gameObject.AddComponent<MainMenuBookmark>().Clicked = SkipTutorial;
+            var _skip = BookText(_sr, GameLanguage.T("튜토리얼 건너뛰기 (Esc)  »", "Skip tutorial (Esc)  »"), new Vector2(1590f, 955f), 27f, TextAlignmentOptions.MidlineRight, 460f);
+            ApplyFont(_skip, 27f); _skip.raycastTarget = true;
+            var _skipBm = _skip.gameObject.AddComponent<MainMenuBookmark>(); _skipBm.Clicked = SkipTutorial; _skipBm.Hovered = PlayHover;
             ShowSkip(false);
 
             // 넘김 표시(우측 페이지 하단)
@@ -409,7 +433,7 @@ namespace HistoryCrash.UI
                 var _frame = new GameObject("Frame", typeof(RectTransform), typeof(Image), typeof(AspectRatioFitter));
                 _frame.transform.SetParent(_box, false);
                 var _fit = _frame.GetComponent<AspectRatioFitter>(); _fit.aspectMode = AspectRatioFitter.AspectMode.FitInParent; _fit.aspectRatio = (float)_tex.width / _tex.height;
-                var _fi = _frame.GetComponent<Image>(); _fi.color = new Color(INK.r, INK.g, INK.b, 0.55f); _fi.raycastTarget = false;
+                var _fi = _frame.GetComponent<Image>(); _fi.color = new Color(INK.r, INK.g, INK.b, 0.8f); _fi.raycastTarget = false;
                 var _img = Raw("Image", (RectTransform)_frame.transform, new Rect(0f, 0f, 1f, 1f), Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f));
                 _img.rectTransform.offsetMin = new Vector2(TUTORIAL_FRAME, TUTORIAL_FRAME); _img.rectTransform.offsetMax = new Vector2(-TUTORIAL_FRAME, -TUTORIAL_FRAME);
                 _img.texture = _tex;
@@ -418,19 +442,19 @@ namespace HistoryCrash.UI
 
             // 오른쪽: 제목 + 설명(줄바꿈) + 쪽 번호
             PageTitle(_r, _page.Title, 1085f);
-            var _body = BookText(_r, _page.Body, new Vector2(1123f, 345f), 28f, TextAlignmentOptions.TopLeft, 430f);
+            var _body = BookText(_r, _page.Body, new Vector2(1123f, 345f), 31f, TextAlignmentOptions.TopLeft, 430f);
             _body.rectTransform.pivot = new Vector2(0f, 1f); _body.rectTransform.sizeDelta = new Vector2(430f, 560f);
             _body.textWrappingMode = TextWrappingModes.Normal; _body.lineSpacing = 12f;
-            ApplyFont(_body, 28f);
+            ApplyFont(_body, 31f);
             var _num = BookText(_r, $"{_index + 1} / {_tutorialPages.Length}", new Vector2(1338f, 880f), 22f, TextAlignmentOptions.Center, 200f);
-            _num.color = new Color(INK.r, INK.g, INK.b, 0.6f);
+            _num.color = new Color(INK.r, INK.g, INK.b, 0.85f);
             return _group;
         }
 
         private void PageTitle(RectTransform _p, string _s, float _x)
         {
-            var _t = BookText(_p, _s, new Vector2(_x + 250f, 242f), 30f, TextAlignmentOptions.Center, 500f);
-            ApplyFont(_t, 30f);
+            var _t = BookText(_p, _s, new Vector2(_x + 250f, 242f), 34f, TextAlignmentOptions.Center, 500f);
+            ApplyFont(_t, 34f);
         }
 
         private void ControlRows(RectTransform _p, int[] _idx, float _x0, float _x1, bool _ko)
@@ -439,12 +463,12 @@ namespace HistoryCrash.UI
             for (int i = 0; i < _idx.Length; i++)
             {
                 float _y = 380f + i * 84f;
-                var _k = BookText(_p, C[_idx[i], _ko ? 2 : 0], new Vector2(_x0, _y), 28f, TextAlignmentOptions.MidlineLeft, 220f);
-                var _d = BookText(_p, C[_idx[i], _ko ? 3 : 1], new Vector2(_x1, _y), 26f, TextAlignmentOptions.MidlineRight, 260f);
-                ApplyFont(_k, 28f); ApplyFont(_d, 26f);
+                var _k = BookText(_p, C[_idx[i], _ko ? 2 : 0], new Vector2(_x0, _y), 31f, TextAlignmentOptions.MidlineLeft, 220f);
+                var _d = BookText(_p, C[_idx[i], _ko ? 3 : 1], new Vector2(_x1, _y), 29f, TextAlignmentOptions.MidlineRight, 260f);
+                ApplyFont(_k, 31f); ApplyFont(_d, 29f);
                 if (i < _idx.Length - 1)
                 {
-                    var _ln = MakeRect(_p, "Line", new Vector2(_x0, _y + 42f), new Vector2(_x1 - _x0, 1.2f), new Color(INK.r, INK.g, INK.b, 0.28f), 0f, new Vector2(0f, 0.5f));
+                    var _ln = MakeRect(_p, "Line", new Vector2(_x0, _y + 42f), new Vector2(_x1 - _x0, 1.2f), new Color(INK.r, INK.g, INK.b, 0.4f), 0f, new Vector2(0f, 0.5f));
                     _ln.rectTransform.anchorMin = _ln.rectTransform.anchorMax = new Vector2(0f, 1f);
                 }
             }
@@ -575,6 +599,7 @@ namespace HistoryCrash.UI
             _nextRibbon = MakeRibbon(_box, "NextRibbon", RIGHT_RIBBON_PX, SkipIntro, out _unused);
             _backRibbon = MakeRibbon(_box, "BackRibbon", LEFT_RIBBON_PX, GoBackPage, out _backGroup);
             _backRibbon.texture = GameLanguage.IsKorean ? _ribbonBackKo : _ribbonBackEn;
+            SetRibbonLabel(_backRibbon, GameLanguage.T("이전 장", "Back"));
             SetNextRibbon(0);
             _backGroup.alpha = 0f; _backGroup.interactable = _backGroup.blocksRaycasts = false;
 
@@ -592,9 +617,41 @@ namespace HistoryCrash.UI
             _r.offsetMin = _r.offsetMax = Vector2.zero;
             var _img = _go.GetComponent<RawImage>(); _img.raycastTarget = true;
             _group = _go.GetComponent<CanvasGroup>();
-            var _bm = _go.AddComponent<MainMenuBookmark>(); _bm.Clicked = _onClick;
+            var _bm = _go.AddComponent<MainMenuBookmark>(); _bm.Clicked = _onClick; _bm.Hovered = PlayHover;
+            // 그림에 수놓인 글씨는 천 주름을 따라 휘어 읽기 어려워 지웠고, 그 자리에 반듯한 글자를 올림
+            var _lg = new GameObject("Label", typeof(RectTransform), typeof(TextMeshProUGUI));
+            _lg.transform.SetParent(_r, false);
+            var _lr = (RectTransform)_lg.transform;
+            Vector2 _c = _name == "BackRibbon" ? BACK_LABEL_UV : NEXT_LABEL_UV;
+            _lr.anchorMin = _lr.anchorMax = _c; _lr.pivot = new Vector2(0.5f, 0.5f);
+            _lr.anchoredPosition = Vector2.zero; _lr.sizeDelta = new Vector2(_px.width * 1.2f, 40f);
+            var _lt = _lg.GetComponent<TextMeshProUGUI>();
+            _lt.alignment = TextAlignmentOptions.Center; _lt.textWrappingMode = TextWrappingModes.NoWrap; _lt.overflowMode = TextOverflowModes.Overflow;
+            _lt.raycastTarget = false; _lt.color = RIBBON_TEXT;
+            _ribbonLabels[_img] = _lt;
             return _img;
         }
+
+        // 리본 위 글자 자리(리본 그림 안 비율, 왼쪽 아래 0,0) — 원래 수놓인 글씨가 있던 자리의 가운데
+        private static readonly Vector2 NEXT_LABEL_UV = new Vector2(0.39f, 0.55f), BACK_LABEL_UV = new Vector2(0.64f, 0.55f);
+        private static readonly Color RIBBON_TEXT = new Color32(240, 208, 140, 255);
+        private readonly Dictionary<RawImage, TextMeshProUGUI> _ribbonLabels = new Dictionary<RawImage, TextMeshProUGUI>();
+
+        /// <summary>리본 글자를 정함(한글이면 한글 글꼴). 진갈색 테두리로 천 위에서도 또렷하게</summary>
+        private void SetRibbonLabel(RawImage _img, string _s)
+        {
+            if (!_img || !_ribbonLabels.TryGetValue(_img, out var _t)) return;
+            _t.text = _s;
+            ApplyFont(_t, 25f);
+            _t.fontStyle = FontStyles.Bold;
+            if (_t.fontSharedMaterial && !_t.fontSharedMaterial.name.EndsWith("(Ribbon)"))
+            {
+                _t.fontMaterial = new Material(_t.fontSharedMaterial) { name = _t.fontSharedMaterial.name + " (Ribbon)" };
+                _t.outlineWidth = 0.22f; _t.outlineColor = new Color32(35, 18, 8, 255);
+            }
+        }
+
+        private static readonly string[] NEXT_KO = { "건너뛰기", "다음 장", "모험 시작" }, NEXT_EN = { "Skip", "Next page", "Begin" };
 
         /// <summary>우측 리본 그림을 바꿈: 0 건너뛰기, 1 다음 장, 2 모험 시작(설정 언어에 맞춰)</summary>
         private void SetNextRibbon(int _which)
@@ -602,6 +659,14 @@ namespace HistoryCrash.UI
             DOTween.Kill(_nextRibbon);   // 내려앉는 중에 글씨가 바뀌면 프레임 재생을 멈추고 바로 새 그림
             var _set = GameLanguage.IsKorean ? _ribbonNextKo : _ribbonNextEn;
             if (_set != null && _which >= 0 && _which < _set.Length && _set[_which]) _nextRibbon.texture = _set[_which];
+            var _names = GameLanguage.IsKorean ? NEXT_KO : NEXT_EN;
+            if (_which >= 0 && _which < _names.Length) SetRibbonLabel(_nextRibbon, _names[_which]);
+            ShowRibbonLabel(_nextRibbon, 1f);
+        }
+
+        private void ShowRibbonLabel(RawImage _img, float _alpha)
+        {
+            if (_img && _ribbonLabels.TryGetValue(_img, out var _t)) { _t.DOKill(); _t.alpha = _alpha; }
         }
 
         private void ShowBookmark(bool _on)
@@ -637,25 +702,41 @@ namespace HistoryCrash.UI
         {
             if (!_img) return;
             DOTween.Kill(_img);
-            if (_frames == null || _frames.Length == 0) { _img.texture = _still; return; }
+            if (_frames == null || _frames.Length == 0) { _img.texture = _still; ShowRibbonLabel(_img, 1f); return; }
             _img.texture = _frames[0];
+            ShowRibbonLabel(_img, 0f);   // 리본이 내려앉는 동안은 글자를 숨겼다가, 다 놓이면 나타남
             DOVirtual.Float(0f, _frames.Length, _drapeTime, _v => { int _i = Mathf.Min(_frames.Length - 1, (int)_v); if (_frames[_i]) _img.texture = _frames[_i]; })
                 .SetEase(Ease.Linear).SetUpdate(true).SetId(_img).SetLink(_img.gameObject)
-                .OnComplete(() => _img.texture = _still);
+                .OnComplete(() =>
+                {
+                    _img.texture = _still;
+                    if (_ribbonLabels.TryGetValue(_img, out var _t)) { _t.alpha = 0f; _t.DOFade(1f, 0.2f).SetUpdate(true).SetLink(_t.gameObject); }
+                });
         }
 
         public void Select(int _i)
         {
             if (_busy || PauseSettingsUI.IsOpen || _i < 0 || _i >= _itemTexts.Count) return;
+            if (_i != _sel && _menuGroup && _menuGroup.interactable) PlayHover();   // 마우스·방향키로 고른 것이 바뀔 때만
             _sel = _i;
             for (int k = 0; k < _itemTexts.Count; k++)
             {
                 bool _on = k == _sel;
-                _itemTexts[k].color = _on ? FACE : new Color(FACE.r, FACE.g, FACE.b, 185f / 255f);
-                _itemTexts[k].outlineColor = new Color(EDGE.r, EDGE.g, EDGE.b, _on ? 200f / 255f : 140f / 255f);
+                // 고른 것: 밝은 금빛 + 살짝 크게 / 나머지: 조금 어둡게 → 한눈에 구분
+                _itemTexts[k].color = _on ? FACE_SEL : new Color(FACE.r, FACE.g, FACE.b, 200f / 255f);
+                _itemTexts[k].outlineColor = new Color(EDGE.r, EDGE.g, EDGE.b, _on ? 1f : 200f / 255f);
+                _itemTexts[k].rectTransform.localScale = Vector3.one * (_on ? 1.08f : 1f);
             }
             var _r = _itemTexts[_sel].rectTransform;
             _selMark.anchoredPosition = new Vector2(_r.anchoredPosition.x - _menuSize * 0.55f, _r.anchoredPosition.y);
+        }
+
+        // ---- 마우스를 올렸을 때 소리(ESC 설정창과 같은 소리) ----
+        private AudioClip _hoverClip;
+        private void PlayHover()
+        {
+            if (!_hoverClip) _hoverClip = Resources.Load<AudioClip>("UI/Settings/UI_Settings_Hover");
+            if (_hoverClip && SoundManager.Instance) SoundManager.Instance.PlaySfx(_hoverClip, 0.6f);
         }
 
         public void Submit(int _i)
@@ -735,6 +816,16 @@ namespace HistoryCrash.UI
                 var _prev = _as[1 - _back];
                 if (_prev.isPlaying) _prev.DOFade(0f, _audioFade).SetUpdate(true).SetLink(gameObject).OnComplete(_prev.Stop);
             }
+            // 스토리(인트로) 영상만 도감 종이를 밝게 보정: 줌인 영상에서 이어질 때 튀지 않게 0.8초에 걸쳐 서서히
+            bool _story = _clip == _introKo || _clip == _introEn;
+            if (_story && Parchment())
+            {
+                if (!_parchVideo) _parchVideo = new Material(Parchment()) { name = "MainMenu_ParchmentVideo" };
+                _parchVideo.DOKill(); _parchVideo.SetFloat("_Strength", 0f);
+                _parchVideo.DOFloat(1f, "_Strength", 0.8f).SetEase(Ease.InOutSine).SetUpdate(true).SetLink(gameObject);
+                _vimg[_back].material = _parchVideo;
+            }
+            else _vimg[_back].material = null;
             _vimg[_back].transform.SetAsLastSibling();
             int _old = _front; _front = _back;
             if (_fade > 0f) yield return Fade(_vimg[_back], 0f, 1f, _fade, true);
@@ -798,6 +889,15 @@ namespace HistoryCrash.UI
             var _menu = new GameObject("Menu", typeof(RectTransform), typeof(CanvasGroup)).GetComponent<RectTransform>();
             _menu.SetParent(_root, false); Stretch(_menu);
             _menuGroup = _menu.GetComponent<CanvasGroup>();
+            // 메뉴 뒤 은은한 어두운 번짐: 촛불 빛을 받은 밝은 책상 위에서도 글자가 떠 보이게
+            var _back = new GameObject("MenuBackdrop", typeof(RectTransform), typeof(RawImage));
+            _back.transform.SetParent(_menu, false);
+            var _br = (RectTransform)_back.transform;
+            _br.anchorMin = _br.anchorMax = new Vector2(0f, 1f); _br.pivot = new Vector2(0.5f, 0.5f);
+            float _menuH = (_items.Count - 1) * _menuSize * 1.55f;
+            _br.anchoredPosition = new Vector2(_menuPos.x + _menuSize * 2f, -(_menuPos.y + _menuH / 2f));
+            _br.sizeDelta = new Vector2(_menuSize * 9f, _menuH + _menuSize * 4.5f);
+            var _bi = _back.GetComponent<RawImage>(); _bi.texture = SoftBlob(); _bi.color = new Color(0f, 0f, 0f, 0.6f); _bi.raycastTarget = false;
             for (int i = 0; i < _items.Count; i++)
             {
                 var _t = MakeText(_menu, _items[i], _menuPos + new Vector2(0f, i * _menuSize * 1.55f), _menuSize, false);
@@ -805,7 +905,7 @@ namespace HistoryCrash.UI
                 var _it = _t.gameObject.AddComponent<MainMenuItem>(); _it.Owner = this; _it.Index = i;
                 _itemTexts.Add(_t);
             }
-            _selMark = MakeRect(_menu, "Select", Vector2.zero, new Vector2(12.7f, 12.7f), RUBY, 45f, new Vector2(0.5f, 0.5f)).rectTransform;
+            _selMark = MakeRect(_menu, "Select", Vector2.zero, new Vector2(_menuSize * 0.3f, _menuSize * 0.3f), RUBY, 45f, new Vector2(0.5f, 0.5f)).rectTransform;
             Select(0);
 
             // 인트로 뒤 책장 넘김·조작법 페이지(영상 위, 검은 막 아래)
@@ -831,10 +931,10 @@ namespace HistoryCrash.UI
             _t.textWrappingMode = TextWrappingModes.NoWrap; _t.raycastTarget = false; _t.color = FACE;
             // 진갈색 테두리 + 아래로 떨어지는 그림자
             _t.fontMaterial = new Material(_t.fontSharedMaterial);
-            _t.outlineWidth = 0.12f; _t.outlineColor = EDGE;
+            _t.outlineWidth = 0.18f; _t.outlineColor = EDGE;
             var _m = _t.fontMaterial;
             _m.EnableKeyword("UNDERLAY_ON");
-            _m.SetColor("_UnderlayColor", new Color(0f, 0f, 0f, 0.6f));
+            _m.SetColor("_UnderlayColor", new Color(0f, 0f, 0f, 0.85f));
             _m.SetFloat("_UnderlayOffsetX", 0.35f); _m.SetFloat("_UnderlayOffsetY", -0.5f); _m.SetFloat("_UnderlaySoftness", 0.35f);
             if (_gradient)
             {
@@ -843,6 +943,23 @@ namespace HistoryCrash.UI
                 _t.enableVertexGradient = true; _t.colorGradient = new VertexGradient(_top, _top, _bot, _bot); _t.color = Color.white;
             }
             return _t;
+        }
+
+        /// <summary>가운데가 진하고 가장자리로 갈수록 투명해지는 부드러운 원(타원으로 늘려 씀)</summary>
+        private static Texture2D SoftBlob()
+        {
+            const int N = 64;
+            var _tex = new Texture2D(N, N, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, name = "MainMenu_SoftBlob" };
+            float _c = (N - 1) * 0.5f;
+            for (int _y = 0; _y < N; _y++)
+                for (int _x = 0; _x < N; _x++)
+                {
+                    float _d = Mathf.Sqrt((_x - _c) * (_x - _c) + (_y - _c) * (_y - _c)) / _c;
+                    float _a = Mathf.Clamp01(1f - _d); _a = _a * _a * (3f - 2f * _a);
+                    _tex.SetPixel(_x, _y, new Color(1f, 1f, 1f, _a));
+                }
+            _tex.Apply();
+            return _tex;
         }
 
         private static Image MakeRect(RectTransform _parent, string _n, Vector2 _pos, Vector2 _size, Color _c, float _rot, Vector2 _pivot)
