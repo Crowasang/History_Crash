@@ -117,6 +117,7 @@ namespace HistoryCrash.Boss
         {
             var _root = _d.Root.transform;
             float _y = _dropHeight, _v = _startSpeed;
+            HistoryCrash.Sound.GameSfx.Play("Weapon_Fall", _root);
             // 떨어지는 동안 빛 꼬리
             var _streak = ElementFx.Trail(Element.Electric, _root, 0.14f, 120f);
             var _sm = _streak.main; _sm.startColor = new ParticleSystem.MinMaxGradient(Color.white, _impactSparkColor);
@@ -132,6 +133,7 @@ namespace HistoryCrash.Boss
             var _em = _streak.emission; _em.rateOverTime = 0f; _streak.transform.SetParent(null, true); Destroy(_streak.gameObject, 0.8f);
             // 착지: 먼지 고리 + 불티, 눌렸다가 튕겨 올라옴
             ElementFx.Impact(_rest, _impactSparkColor, _impactDustColor, 1f);
+            HistoryCrash.Sound.GameSfx.Play("Weapon_Land", _rest);
             for (float _t = 0; _t < _impactReboundTime && _root; _t += Time.deltaTime)
             {
                 float _u = _t / _impactReboundTime;
