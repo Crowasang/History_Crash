@@ -385,7 +385,7 @@ MonoBehaviour:
   _titlePos: {x: 90, y: 120}
   _titleSize: 120
   _menuPos: {x: 1560, y: 470}
-  _menuSize: 46
+  _menuSize: 56
 --- !u!4 &976297653
 Transform:
   m_ObjectHideFlags: 0
