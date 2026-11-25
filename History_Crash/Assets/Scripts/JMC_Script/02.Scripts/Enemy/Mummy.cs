@@ -147,7 +147,9 @@ namespace HistoryCrash.Enemy
             Active = true;
             _nextOrb = Time.time + _orbInterval;
             if (_animator) _animator.Play("Walk", 0, Random.value);
+            _walkSfx = HistoryCrash.Sound.GameSfx.Play("Mummy_Walk", transform, 0f, true);
         }
+        private HistoryCrash.Sound.GameSfx.Voice _walkSfx;   // 걷는 동안 반복
 
         private void Update()
         {
@@ -184,6 +186,7 @@ namespace HistoryCrash.Enemy
                 var _target = Quaternion.LookRotation(_dir, Vector3.up);
                 transform.rotation = Quaternion.RotateTowards(transform.rotation, _target, _turnSpeed * Time.deltaTime);
             }
+            HistoryCrash.Sound.GameSfx.SetGain(_walkSfx, _moved > 0.05f ? 1f : 0f);
             if (_animator) _animator.speed = Mathf.Clamp(_moved / Mathf.Max(_walkClipSpeed, 0.01f), 0.6f, _maxWalkAnimSpeed);
 
             // 접촉 피해(기획: 1). PlayerHealth의 피격 무적이 연속 피해를 막는다.
@@ -230,6 +233,8 @@ namespace HistoryCrash.Enemy
         private IEnumerator Die(Vector3 _travelDir)
         {
             _travelDir.y = 0;
+            HistoryCrash.Sound.GameSfx.FadeOut(_walkSfx, 0.15f);
+            HistoryCrash.Sound.GameSfx.Play("Mummy_Death", transform.position);
             // 공격이 머미의 등 쪽에서 와서 앞으로 진행하면 뒤에서 맞은 것 → 앞으로 쓰러짐(Dying)
             bool _fromBehind = Vector3.Dot(transform.forward, _travelDir.normalized) > 0f;
             string _state = _fromBehind ? "Dying" : "Death";
@@ -260,6 +265,8 @@ namespace HistoryCrash.Enemy
             ElementFx.Glow(_element, _spirit.transform, 2.5f, 3f);
             foreach (var _r in GetComponentsInChildren<Renderer>()) _r.enabled = false;
 
+            // 파라오 피격 소리는 1.2초쯤 가장 커지므로, 영혼이 닿는 순간에 맞춰 먼저 시작
+            if (_pharaoh) HistoryCrash.Sound.GameSfx.Play("Pharaoh_Attacked", _pharaoh, Mathf.Max(0f, _spiritRiseTime + _spiritFlyTime - 1.2f), false, true);
             Vector3 _a = _spirit.transform.position, _b = _a + Vector3.up * _spiritRise;
             for (float _t = 0; _t < _spiritRiseTime; _t += Time.deltaTime)
             {

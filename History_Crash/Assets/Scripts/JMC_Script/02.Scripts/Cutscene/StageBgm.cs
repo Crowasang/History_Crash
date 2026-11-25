@@ -36,6 +36,16 @@ namespace HistoryCrash.Cutscene
             foreach (var _b in FindObjectsByType<StageBgm>(FindObjectsSortMode.None)) { _b._target = 0f; _b._speed = 1f / Mathf.Max(0.01f, _sec); }
         }
 
+        /// <summary>배경음을 다시 서서히 튼다(게임 클리어 선택지)</summary>
+        public static void FadeIn(float _sec)
+        {
+            foreach (var _b in FindObjectsByType<StageBgm>(FindObjectsSortMode.None))
+            {
+                _b._target = 1f; _b._speed = 1f / Mathf.Max(0.01f, _sec);
+                if (_b._src && _b._src.clip && !_b._src.isPlaying) _b._src.Play();
+            }
+        }
+
         private IEnumerator Start()
         {
             _src = gameObject.AddComponent<AudioSource>();

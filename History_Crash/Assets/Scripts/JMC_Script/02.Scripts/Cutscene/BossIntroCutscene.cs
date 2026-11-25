@@ -50,7 +50,7 @@ namespace HistoryCrash.Cutscene
         }
 
         // 파라오 찾기: JMC PharaohHealth(TEST_JMC) → 없으면 팀 GameManager의 보스 체력이 붙은 오브젝트(Game 씬)
-        private static Transform FindPharaoh()
+        internal static Transform FindPharaoh()
         {
             var _h = FindFirstObjectByType<PharaohHealth>();
             if (_h) return _h.transform;

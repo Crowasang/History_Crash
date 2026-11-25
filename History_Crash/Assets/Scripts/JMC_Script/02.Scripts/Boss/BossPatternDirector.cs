@@ -249,6 +249,7 @@ namespace HistoryCrash.Boss
             if (_p == (int)BossPattern.B && _bWarnTime > 0f)
             {
                 EnsureTelegraphs();
+                HistoryCrash.Sound.GameSfx.Play("Pharaoh_CastB", _pharaoh);   // 예고가 시작될 때
                 for (int _k = 0; _k < _bRoots.Length; _k++)
                 {
                     if (!_bRoots[_k].gameObject.activeSelf) { _bWarns[_k].Hide(); continue; }
@@ -281,6 +282,8 @@ namespace HistoryCrash.Boss
             }
             if (_pharaohAnimator) { _pharaohAnimator.speed = _tempo; _pharaohAnimator.CrossFadeInFixedTime(_pharaohStates[_p], 0.25f / _tempo); }
 
+            PlayCastSfx(_p);
+
             while (_castTime < _castLength[_p]) yield return null;
 
             // B: 솟았던 함정 중 한 곳에 스태프
@@ -295,6 +298,17 @@ namespace HistoryCrash.Boss
             if (_p == (int)BossPattern.D) { RestoreShards(); _sunRoot.gameObject.SetActive(false); _dWarn.Hide(); }
             if (_pharaohAnimator) { _pharaohAnimator.speed = 1f; _pharaohAnimator.CrossFadeInFixedTime("Idle", 0.33f); }
             _current = -1;
+        }
+
+        // ---------- 소리 ----------
+        private HistoryCrash.Sound.GameSfx.Voice _weaponSfx;
+        // 무기 소리는 시전 시작부터의 길이로 만들어져 있음(tempo 1.3 기준). B의 시전 목소리는 예고 시작 때 따로 냄
+        private void PlayCastSfx(int _p)
+        {
+            string _id = "ABCDE"[_p].ToString();
+            if (_p != (int)BossPattern.B || _bWarnTime <= 0f) HistoryCrash.Sound.GameSfx.Play("Pharaoh_Cast" + _id, _pharaoh);
+            Transform _at = _p == (int)BossPattern.A ? _copesh : _p == (int)BossPattern.B ? _bRoots[0] : _p == (int)BossPattern.D ? _sunRoot : _roots[_p];
+            _weaponSfx = HistoryCrash.Sound.GameSfx.Play("Weapon_" + _id, _at, _p == (int)BossPattern.D ? 0.1f : 0f);
         }
 
         // ---------- 스태프 드랍 ----------
@@ -652,6 +666,7 @@ namespace HistoryCrash.Boss
                 {
                     // A: 바닥에 닿은 자리에서 깨짐(바닥까지 못 가고 끝나면 그 자리에서 진행 방향 반대로)
                     _flightA.Notified = true;
+                    HistoryCrash.Sound.GameSfx.FadeOut(_weaponSfx, 0.25f);   // 코페쉬가 깨지면 회전 소리를 걷음
                     EnsureFx();
                     Vector3 _p = _flightA.Start + _flightA.Dir * _flightA.Total;
                     if (_flightA.Straight) _fxA.Burst(new Vector3(_p.x, _grid.FloorTopY + 0.03f, _p.z), Vector3.up, 1f, 12);
@@ -671,6 +686,7 @@ namespace HistoryCrash.Boss
                         EnsureFx();
                         Vector3 _p = _f.Start + _f.Dir * _f.Total;
                         _fxC.Burst(_p, Vector3.up, 1.2f, 8);
+                        HistoryCrash.Sound.GameSfx.Play("Weapon_C_GlassBreak", _p, null, 0f, false, false, 0.04f);
                         if (Vector3.Distance(_player.position, _p) < _cBlastRadius + _playerRadius) Hit(_i, true, "C Gem " + (_i + 1) + " Blast", _p);
                         if (_i == 2) DropStaff(2, _p);   // C: 3번째 보석이 터진 지점
                     }
