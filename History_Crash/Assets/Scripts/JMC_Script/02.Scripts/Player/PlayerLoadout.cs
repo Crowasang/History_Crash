@@ -284,7 +284,7 @@ namespace HistoryCrash.Player
                 var _style = new GUIStyle(GUI.skin.label) { fontSize = 18, alignment = TextAnchor.MiddleCenter };
                 // 설정창 Language에 따라 한국어/영어
                 string _what = _it.Kind == PickupKind.Staff
-                    ? HistoryCrash.UI.GameLanguage.T("스태프 " + _staffNames[_it.Value], "Staff " + _staffNames[_it.Value])
+                    ? HistoryCrash.UI.GameLanguage.T("무기 " + _staffNames[_it.Value], "Weapon " + _staffNames[_it.Value])
                     : HistoryCrash.UI.GameLanguage.T(ElementInfo.NameKo(_it.ElementValue) + " 오브", ElementInfo.Name(_it.ElementValue) + " Orb");
                 string _msg = HistoryCrash.UI.GameLanguage.T("[E] " + _what + " 줍기", "[E] Pick up " + _what);
                 GUI.Label(new Rect(Screen.width / 2 - 160, Screen.height * 0.62f, 320, 30), _msg, _style);
