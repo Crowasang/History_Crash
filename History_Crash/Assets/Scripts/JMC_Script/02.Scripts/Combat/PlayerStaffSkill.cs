@@ -187,6 +187,7 @@ namespace HistoryCrash.Combat
             _glow.transform.localPosition = new Vector3(0, 0.05f, 0);
             var _gm = _glow.main; _gm.gravityModifier = -0.2f;
             ElementFx.Impact(_pos, ElementInfo.Color(_element), new Color(0.3f, 0.27f, 0.2f, 0.4f), 2.0f);
+            HistoryCrash.Sound.GameSfx.Play("Player_TrapSet");
             float _born = Time.time;
             while (Time.time - _born < B_LIFE)
             {

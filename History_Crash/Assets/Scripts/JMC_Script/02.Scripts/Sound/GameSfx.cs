@@ -11,7 +11,7 @@ namespace HistoryCrash.Sound
     /// 게임플레이 효과음. 다른 스크립트가 GameSfx.Play("파일 이름", …)로 부르고, 파일은 Resources/Sfx 아래에서 이름으로 찾는다.
     /// - 음량: 설정창 Master × Effects × 아래 표(TUNE). 파일별 크기·들리는 방식은 표만 고치면 된다.
     /// - 설정창(timeScale 0)에서는 함께 멈췄다가 이어서 재생. 게임 오버·클리어가 시작되면 StopAll로 걷고 그 씬에서는 더 내지 않음.
-    /// - 발걸음·피격·호루스·아누비스 강제 이동은 여기서 상태를 읽기만 해서 냄(팀 플레이어 스크립트는 고치지 않음).
+    /// - 발걸음·점프·착지·구멍 추락·피격·호루스·아누비스 강제 이동은 여기서 상태를 읽기만 해서 냄(팀 플레이어 스크립트는 고치지 않음).
     /// - 씬에 따로 놓지 않아도 BossIntroCutscene.SCENES 씬이 열리면 자동으로 생기고, 씬이 바뀌면 함께 사라진다.
     /// </summary>
     public class GameSfx : MonoBehaviour
@@ -30,6 +30,7 @@ namespace HistoryCrash.Sound
             { "Pharaoh_CastA", (0.85f, Space.Half) }, { "Pharaoh_CastB", (0.70f, Space.Half) }, { "Pharaoh_CastC", (0.75f, Space.Half) },
             { "Pharaoh_CastD", (0.85f, Space.Half) }, { "Pharaoh_CastE", (0.75f, Space.Half) },
             { "Weapon_A", (0.50f, Space.Half) }, { "Weapon_B", (0.70f, Space.Half) }, { "Weapon_C", (1.00f, Space.Half) },
+            { "Weapon_A_Break", (0.60f, Space.Half) }, { "Weapon_E_Break", (0.22f, Space.Half) },
             { "Weapon_C_GlassBreak", (0.80f, Space.World) }, { "Weapon_D", (0.85f, Space.Half) }, { "Weapon_E", (0.70f, Space.Half) },
             { "Pharaoh_Attacked", (0.75f, Space.Half) },
             // 미라
@@ -38,6 +39,11 @@ namespace HistoryCrash.Sound
             { "Player_Cast", (0.65f, Space.Flat) }, { "Player_AttackA", (0.75f, Space.Flat) }, { "Player_AttackB", (0.90f, Space.World) },
             { "Player_AttackC", (0.75f, Space.Flat) }, { "Player_AttackD", (0.70f, Space.Flat) }, { "Player_AttackE", (0.75f, Space.Flat) },
             { "Player_Hit_Leather", (0.75f, Space.Flat) }, { "Player_hit_voice", (0.85f, Space.Flat) }, { "Player_Walk", (0.55f, Space.Flat) },
+            { "Player_Jump", (0.25f, Space.Flat) }, { "Player_Land", (0.55f, Space.Flat) }, { "Player_Fall", (0.40f, Space.Flat) },
+            { "Player_Recover", (0.32f, Space.Flat) }, { "Player_TrapSet", (0.40f, Space.Flat) },
+            // 줍기·드롭
+            { "Pickup_Weapon", (0.45f, Space.Flat) }, { "Pickup_Orb", (0.38f, Space.Flat) },
+            { "Weapon_Fall", (0.40f, Space.Half) }, { "Weapon_Land", (0.40f, Space.Half) }, { "Orb_Appear", (0.20f, Space.World) },
             // 기믹
             { "Horus_Warning", (0.70f, Space.Flat) }, { "Horus_Collapse", (0.80f, Space.Flat) }, { "Horus_Restore", (0.70f, Space.Flat) },
             { "Anubis_Warning", (0.50f, Space.Half) }, { "Anubis_Pull", (0.40f, Space.Flat) }, { "Anubis_Land", (0.48f, Space.Flat) },
@@ -82,7 +88,7 @@ namespace HistoryCrash.Sound
         {
             if (s_inst == this) s_inst = null;
             if (_movable != null) { _movable.OnForceMoveStarted -= OnPull; _movable.OnForceMoveEnded -= OnLand; }
-            if (_motion != null) _motion.OnMoveChanged -= OnMove;
+            if (_motion != null) { _motion.OnMoveChanged -= OnMove; _motion.OnJumped -= OnJump; _motion.OnLanded -= OnJumpLand; }
         }
 
         // ---------------- 재생 ----------------
@@ -169,7 +175,7 @@ namespace HistoryCrash.Sound
                 _v.Src.volume = Level(_v);
                 if (!_v.Src.isPlaying && AudioSettings.dspTime > 0) Release(_n);
             }
-            if (!_stopped && !_muted) { Footsteps(); Hit(); Horus(); }
+            if (!_stopped && !_muted) { Footsteps(); Hit(); Air(); Horus(); }
         }
 
         private void Release(int _n)
@@ -180,7 +186,7 @@ namespace HistoryCrash.Sound
 
         // ---------------- 플레이어 상태를 읽어 내는 소리 ----------------
         private Transform _player; private IPlayerMotion _motion; private IJumpState _jump; private IForcedMovable _movable; private IHealthReadOnly _hp;
-        private PlayerMover _jmcMover; private PlayerHealth _jmcHp;
+        private PlayerMover _jmcMover; private PlayerHealth _jmcHp; private IPlayerTeleport _teleport; private FallZone _pit;
         private float _moveSpeed, _walked, _nextFind; private Vector3 _lastPos; private int _lastHp = -1;
 
         private bool FindPlayer()
@@ -193,7 +199,8 @@ namespace HistoryCrash.Sound
             else { _jmcHp = FindFirstObjectByType<PlayerHealth>(); if (_jmcHp) _player = _jmcHp.transform; }
             if (!_player) return false;
             _motion = _player.GetComponent<IPlayerMotion>(); _jump = _player.GetComponent<IJumpState>(); _movable = _player.GetComponent<IForcedMovable>(); _jmcMover = _player.GetComponent<PlayerMover>();
-            if (_motion != null) _motion.OnMoveChanged += OnMove;
+            if (_motion != null) { _motion.OnMoveChanged += OnMove; _motion.OnJumped += OnJump; _motion.OnLanded += OnJumpLand; }
+            _teleport = _player.GetComponent<IPlayerTeleport>(); _pit = FindFirstObjectByType<FallZone>();
             if (_movable != null) { _movable.OnForceMoveStarted += OnPull; _movable.OnForceMoveEnded += OnLand; }
             _lastPos = _player.position; _lastHp = Hp();
             return true;
@@ -225,6 +232,29 @@ namespace HistoryCrash.Sound
             int _now = Hp();
             if (_lastHp >= 0 && _now < _lastHp && _now > 0) { Play("Player_Hit_Leather"); Play("Player_hit_voice"); }   // 죽는 한 방은 게임 오버 소리가 이어받음
             _lastHp = _now;
+        }
+
+        // 점프·착지(팀 플레이어는 알림, JMC 플레이어는 상태를 읽음)와 구멍 추락·복귀
+        private bool _falling, _wasGround = true; private Voice _fallVoice;
+        private void OnJump() { Play("Player_Jump"); }
+        private void OnJumpLand() { if (!_falling && (_movable == null || !_movable.IsForceMoving)) Play("Player_Land"); }   // 추락 복귀·강제 이동 도착은 제외
+        private void Air()
+        {
+            if (!_player) return;
+            // 팀 플레이어는 추락 상태를 알려 주지 않아, 발이 바닥 윗면보다 내려간 것으로 봄
+            bool _fall = _jmcMover ? _jmcMover.IsFalling
+                : _teleport != null && _pit && _player.position.y - _teleport.PivotHeightAboveFeet < _pit.GroundY - 0.15f;
+            bool _changed = _fall != _falling;
+            if (_changed)
+            {
+                _falling = _fall;
+                if (_fall) _fallVoice = Play("Player_Fall");
+                else { FadeOut(_fallVoice, 0.4f); if (Hp() > 0) Play("Player_Recover"); }
+            }
+            if (!_jmcMover) return;
+            bool _ground = _jmcMover.IsGrounded;
+            if (_ground != _wasGround && !_fall && !_changed) { if (_ground) OnJumpLand(); else OnJump(); }
+            _wasGround = _ground;
         }
 
         // ---------------- 호루스 ----------------
