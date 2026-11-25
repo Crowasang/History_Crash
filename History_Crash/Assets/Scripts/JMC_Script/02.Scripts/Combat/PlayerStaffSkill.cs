@@ -15,10 +15,10 @@ namespace HistoryCrash.Combat
     /// 주운 스태프의 보스 패턴을 Player가 약화된 버전으로 쓰는 공격. 모양은 패턴 오브젝트, 색·효과는 오브 속성.
     /// 같은 속성의 머미만 맞는다(맞으면 즉사).
     /// - A: 코페쉬가 Player 주위를 돌며 근접 공격
-    /// - B: Player 발밑에 함정 설치, 같은 속성 머미가 밟으면 솟아 공격
-    /// - C: 바라보는 방향으로 보석 3연발
-    /// - D: Player 현재 위치에 범위를 줄인 태양 낙하
-    /// - E: 창 1개를 전방으로 관통 사출
+    /// - B: 조준한 바닥 지점에 함정 설치, 같은 속성 머미가 밟으면 솟아 공격
+    /// - C: 클릭한 순간의 방향으로 보석 3연발
+    /// - D: 조준한 바닥 지점에 범위를 줄인 태양 낙하
+    /// - E: 클릭한 순간의 방향으로 창 2개 관통 사출
     /// </summary>
     public class PlayerStaffSkill : MonoBehaviour
     {
@@ -30,15 +30,23 @@ namespace HistoryCrash.Combat
         public const float E_SPEED = 20f, E_RANGE = 16f, E_HIT = 0.6f, E_SIZE = 2.4f;   // 창 길이. 파라오 E 창 최대 9.7 m(절반 4.85는 너무 커서 약 1/4)
 
         public const float SKILL_LIGHT_INTENSITY = 0.8f;   // 스킬 오브젝트에 붙는 속성색 점광원 세기
-        private Element _element; private int _pattern; private Transform _player; private Vector3 _dir; private TileGrid _grid; private Transform _visualSrc;
+        private Element _element; private int _pattern; private Transform _player; private Vector3 _dir; private Vector3 _target; private TileGrid _grid; private Transform _visualSrc;
         private readonly HashSet<Mummy> _hit = new HashSet<Mummy>();
 
+        /// <summary>공격 발동. 지점을 따로 정하지 않으면 플레이어 발밑(B·D)</summary>
         public static void Cast(int _pattern, Element _e, Transform _player, Vector3 _dir, TileGrid _grid, Transform _patternVisual)
+        {
+            Cast(_pattern, _e, _player, _dir, _player.position, _grid, _patternVisual);
+        }
+
+        /// <param name="_dir">C·E 발사 방향(클릭한 순간 고정, 시전 중 화면을 돌려도 바뀌지 않음)</param>
+        /// <param name="_target">B·D 설치·낙하 지점(PlayerAttackAim이 정함)</param>
+        public static void Cast(int _pattern, Element _e, Transform _player, Vector3 _dir, Vector3 _target, TileGrid _grid, Transform _patternVisual)
         {
             var _go = new GameObject("PlayerSkill_" + "ABCDE"[Mathf.Clamp(_pattern, 0, 4)] + "_" + ElementInfo.Name(_e));
             _go.transform.position = _player.position;
             var _s = _go.AddComponent<PlayerStaffSkill>();
-            _s._pattern = _pattern; _s._element = _e; _s._player = _player; _s._dir = _dir; _s._grid = _grid; _s._visualSrc = _patternVisual;
+            _s._pattern = _pattern; _s._element = _e; _s._player = _player; _s._dir = _dir; _s._target = _target; _s._grid = _grid; _s._visualSrc = _patternVisual;
             ElementFx.Burst(_e, _player.position + Vector3.up * 0.4f + _dir * 0.4f, 0.7f, 16);
             // B는 함정이 솟아 때릴 때 따로 냄. D는 착탄(1.30초)에 맞춰 조금 늦게
             if (_pattern != 1) HistoryCrash.Sound.GameSfx.Play("Player_Attack" + "ABCDE"[Mathf.Clamp(_pattern, 0, 4)], _pattern == 3 ? 0.2f : 0f);
@@ -177,8 +185,8 @@ namespace HistoryCrash.Combat
         // ---------- B: 발밑 함정 ----------
         private IEnumerator RunB()
         {
-            Vector3 _pos = _player.position; _pos.y = FloorY;
-            if (_grid != null) _pos = _grid.CellCenter(_grid.WorldToCell(_player.position), FloorY);
+            Vector3 _pos = _target; _pos.y = FloorY;   // 조준한 지점(칸 가운데)
+            if (_grid != null) _pos = _grid.CellCenter(_grid.WorldToCell(_target), FloorY);
             transform.position = _pos;
             var _trap = Shape(transform, B_SIZE, new Vector3(90, 0, 0), 0.5f, 1.6f, 2.0f);   // 바닥 빛은 함정 범위 표시를 겸함
             _trap.localPosition = new Vector3(0, -B_SIZE * 0.35f, 0);   // 바닥에 반쯤 묻힌 대기 상태
@@ -232,7 +240,7 @@ namespace HistoryCrash.Combat
             while (_fired < C_COUNT)
             {
                 float _t = Time.time - _born;
-                Vector3 _f = _player ? FacingDir() : _dir;
+                Vector3 _f = _dir;   // 클릭한 순간의 방향 고정(시전 중 화면을 돌려도 바뀌지 않음)
                 var _rot = Quaternion.LookRotation(_f, Vector3.up);
                 Vector3 _chest = _player.position + Vector3.up * 0.9f;
                 for (int _i = _fired; _i < C_COUNT; _i++)
@@ -273,13 +281,6 @@ namespace HistoryCrash.Combat
             Destroy(gameObject);
         }
 
-        private Vector3 FacingDir()
-        {
-            var _cam = Camera.main;
-            Vector3 _d = _cam ? Vector3.ProjectOnPlane(_cam.transform.forward, Vector3.up) : _dir;
-            return _d.sqrMagnitude > 1e-4f ? _d.normalized : _dir;
-        }
-
         private IEnumerator Projectile(Vector3 _start, Vector3 _d, float _speed, float _range, float _hitR, float _size, Vector3 _euler, bool _pierce, float _spin, float _dropToY = float.NaN, float _hitAhead = 0f)
         {
             float _startY = _start.y;
@@ -313,13 +314,13 @@ namespace HistoryCrash.Combat
         }
 
         // ---------- D: 축소판 태양 낙하 ----------
-        // 시전 위치(Player 현재 위치) 위에 오브가 생겨 잠시 떠 있는 동안, 바닥에 타격 범위(D_Radius)만 한 마법진이 그려지고
+        // 조준 지점 위에 오브가 생겨 잠시 떠 있는 동안, 바닥에 타격 범위(D_Radius)만 한 마법진이 그려지고
         // 이후 오브가 마법진 중앙으로 떨어져 범위 안 같은 속성 머미를 맞힘. 마법진 바깥 고리 = 실제 타격 범위.
         public const float D_GROW = 0.2f, D_HOVER = 0.55f, D_DRAW = 0.35f;
 
         private IEnumerator RunD()
         {
-            Vector3 _ground = _player.position; _ground.y = FloorY;
+            Vector3 _ground = _target; _ground.y = FloorY;   // 조준한 지점
             transform.position = _ground;
             Color _c = ElementInfo.Color(_element);
             SkillMagicCircle _circle = MagicCircle(transform, D_RADIUS, _c);
@@ -364,7 +365,7 @@ namespace HistoryCrash.Combat
 
         // ---------- 마법진(LineRenderer) ----------
         private static Material _lineMat;
-        private static Material LineMat()
+        public static Material LineMat()
         {
             if (_lineMat) return _lineMat;
             _lineMat = new Material(Shader.Find("Universal Render Pipeline/Particles/Unlit")) { name = "PlayerSkill_CircleLine" };
@@ -457,7 +458,7 @@ namespace HistoryCrash.Combat
             while (_fired < _count)
             {
                 float _t = Time.time - _born;
-                Vector3 _f = _player ? FacingDir() : _dir;
+                Vector3 _f = _dir;   // 클릭한 순간의 방향 고정(시전 중 화면을 돌려도 바뀌지 않음)
                 var _rot = Quaternion.LookRotation(_f, Vector3.up);
                 Vector3 _chest = _player.position + Vector3.up * 0.9f;
                 float _u = Mathf.Clamp01(_t / E_RISE);
