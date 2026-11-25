@@ -57,14 +57,20 @@ namespace HistoryCrash.Boss
         [SerializeField, FormerlySerializedAs("bNearRadius")] private int _bNearRadius = 1;
         [SerializeField, FormerlySerializedAs("bTrapCount"), Tooltip("B 함정 개수(Player 주변에 동시에 솟음)")] private int _bTrapCount = 3;
         [SerializeField, FormerlySerializedAs("bMinSpacing"), Tooltip("B 함정끼리 최소 간격(칸). 함정 하나가 약 2×2.5m라 3칸이면 겹치지 않음")] private int _bMinSpacing = 3;
-        [SerializeField, FormerlySerializedAs("bWarnSize"), Tooltip("B 예고 균열 크기(m). 함정 바닥 크기에 맞춤")] private float _bWarnSize = 2.5f;
         [SerializeField, FormerlySerializedAs("dLandRadius"), Tooltip("D 태양이 떨어지는 칸: Player 칸에서 이 칸수 안(태양 반지름이 약 3칸이라 1이면 가만히 있으면 맞음)")] private int _dLandRadius = 1;
 
         [Header("바닥 예고 표시")]
         [SerializeField, FormerlySerializedAs("bWarnTime"), Tooltip("B 함정이 솟기 전에 예고만 보여 주는 시간(이 시간 뒤 시전 시작)")] private float _bWarnTime = 0.9f;
-        [SerializeField, FormerlySerializedAs("warnCrackColor"), Tooltip("예고 균열·문양 색. impe 바닥 균열 발광(연두, hue≈90)과 같은 계열"), ColorUsage(false, true)] private Color _warnCrackColor = new Color(0.42f, 1.55f, 0.12f);
-        [SerializeField, FormerlySerializedAs("dSealColor"), Tooltip("D 예고 문양·균열 색. 태양(D) 발광색 계열의 파랑(#0F5885 → 백청색)"), ColorUsage(false, true)] private Color _dSealColor = new Color(0.22f, 0.85f, 2.3f);
-        [SerializeField, FormerlySerializedAs("dSealHeatColor"), Tooltip("D 예고 중심의 열기(백청색 코어, 낙하 직전에만 짙어짐)"), ColorUsage(false, true)] private Color _dSealHeatColor = new Color(0.85f, 1.0f, 1.9f);
+        [SerializeField, Tooltip("예고 테두리 색(샘플 나2 연두)"), ColorUsage(false, true)] private Color _rangeLineColor = new Color(0.40f, 1.5f, 0.10f);
+        [SerializeField, Tooltip("예고 균열 색(테두리와 같은 계열의 밝은 색)"), ColorUsage(false, true)] private Color _rangeCrackColor = new Color(0.66f, 2.1f, 0.22f);
+        [SerializeField, Tooltip("A 예고가 나타나는 시점(Cast 기준 초)")] private float _aWarnStart = 0.9f;
+        [SerializeField, Tooltip("A 코페쉬가 발사되는 시점(Cast 기준 초, 클립 측정값)")] private float _aLaunchTime = 2.77f;
+        [SerializeField, Tooltip("C 보석 5개가 발사되는 시점(Cast 기준 초, 클립 측정값)")] private float[] _cLaunchTimes = { 2.67f, 3.22f, 3.77f, 4.33f, 4.88f };
+        [SerializeField, Tooltip("C 첫 보석 예고가 발사보다 앞서 나타나는 시간(나머지는 앞 보석이 발사될 때)")] private float _cWarnLead = 0.9f;
+        [SerializeField, Tooltip("E 지팡이 5개가 발사되는 시점(Cast 기준 초, 클립 측정값)")] private float[] _eLaunchTimes = { 1.73f, 2.32f, 2.98f, 2.18f, 3.48f };
+        [SerializeField, Tooltip("E 지팡이 5개의 줄(Player 줄 기준 칸, 클립 측정값)")] private int[] _eLaneCells = { -3, 0, 3, -6, 6 };
+        [SerializeField, Tooltip("E 예고가 발사보다 앞서 나타나는 시간")] private float _eWarnLead = 1.2f;
+        [SerializeField, Tooltip("E 지팡이 폭과 길이(m)")] private Vector2 _eStaffSize = new Vector2(2.34f, 9.74f);
         [SerializeField, FormerlySerializedAs("dShardFadeStart"), Tooltip("D 파편이 서서히 투명해지기 시작/끝 시점(Cast 기준 초)")] private float _dShardFadeStart = 5.0f;
         [SerializeField, FormerlySerializedAs("dShardFadeEnd")] private float _dShardFadeEnd = 6.3f;
         [SerializeField, FormerlySerializedAs("dWarnStart"), Tooltip("D 예고가 나타나기 시작하는 시점(Cast 기준 초)")] private float _dWarnStart = 0.3f;
@@ -250,20 +256,15 @@ namespace HistoryCrash.Boss
             {
                 EnsureTelegraphs();
                 HistoryCrash.Sound.GameSfx.Play("Pharaoh_CastB", _pharaoh);   // 예고가 시작될 때
-                for (int _k = 0; _k < _bRoots.Length; _k++)
-                {
-                    if (!_bRoots[_k].gameObject.activeSelf) { _bWarns[_k].Hide(); continue; }
-                    _bWarns[_k].Show(new Vector3(_bRoots[_k].position.x, _grid.FloorTopY, _bRoots[_k].position.z), _bWarnSize);
-                }
                 for (float _w = 0; _w < _bWarnTime; _w += Time.deltaTime * _tempo)
                 {
-                    float _u = _w / _bWarnTime;
-                    foreach (var _bw in _bWarns) _bw.Set(Mathf.Lerp(0.55f, 1f, _u) * Pulse(_w, 3f + 7f * _u), _u * 0.85f);
+                    WarnTraps(_w);
                     yield return null;
                 }
             }
 
             _current = _p; _castTime = 0f;
+            EnsureTelegraphs();
             var _castAnims = CastAnimators(_p);
             foreach (var _ca in _castAnims)
             {
@@ -277,8 +278,6 @@ namespace HistoryCrash.Boss
                 _a.Update(0f); _sunRoot.gameObject.SetActive(true);
                 var _mf = _sun.GetComponent<MeshFilter>();
                 _sunRadius = _mf && _mf.sharedMesh ? _mf.sharedMesh.bounds.extents.x * Mathf.Abs(_sun.lossyScale.x) : 2.9f;
-                EnsureTelegraphs();
-                _dWarn.Show(new Vector3(_sunRoot.position.x, _grid.FloorTopY, _sunRoot.position.z), _sunRadius * 2f);
             }
             if (_pharaohAnimator) { _pharaohAnimator.speed = _tempo; _pharaohAnimator.CrossFadeInFixedTime(_pharaohStates[_p], 0.25f / _tempo); }
 
@@ -295,7 +294,8 @@ namespace HistoryCrash.Boss
             }
 
             foreach (var _ca in _castAnims) if (_ca.gameObject.activeInHierarchy) HoldIdle(_ca);
-            if (_p == (int)BossPattern.D) { RestoreShards(); _sunRoot.gameObject.SetActive(false); _dWarn.Hide(); }
+            if (_p == (int)BossPattern.D) { RestoreShards(); _sunRoot.gameObject.SetActive(false); }
+            foreach (var _w in _warns) _w.FadeOut();
             if (_pharaohAnimator) { _pharaohAnimator.speed = 1f; _pharaohAnimator.CrossFadeInFixedTime("Idle", 0.33f); }
             _current = -1;
         }
@@ -340,7 +340,7 @@ namespace HistoryCrash.Boss
 
         private void BeginTargeting(int _p)
         {
-            _dDropped = _eDropped = false; _eLaunchCount = 0; _eLastIdx = -1;
+            _dDropped = _eDropped = false; _warned = 0; _eLaunchCount = 0; _eLastIdx = -1;
             var _pc = _grid.WorldToCell(_player.position);
             switch ((BossPattern)_p)
             {
@@ -427,7 +427,6 @@ namespace HistoryCrash.Boss
 
             if (_current < 0) return;
             _castTime += Time.deltaTime * _tempo;   // 모든 시전 시각(Cast 기준 초)은 클립 시간이라 같은 배율로 진행
-            UpdateTelegraphs();
 
             if (_current == (int)BossPattern.A && !_aLocked)
             {
@@ -527,19 +526,82 @@ namespace HistoryCrash.Boss
         }
 
         // ---------- 바닥 예고 표시 ----------
-        private PatternTelegraph[] _bWarns; private PatternTelegraph _dWarn;
+        private RangeTelegraph[] _warns = new RangeTelegraph[0];   // 칸 하나 = 공격 하나(한 시전에 최대 5개 동시)
+        private int _warned;   // 이번 시전에서 이미 공격이 들어온 예고(비트)
         private float _sunRadius = 2.9f;
         [SerializeField, FormerlySerializedAs("bWarnHideAt"), Tooltip("B 예고를 끄는 시점(Cast 기준 초, 함정이 바닥을 뚫는 순간)")] private float _bWarnHideAt = 0.56f;
 
         private void EnsureTelegraphs()
         {
-            if (_bWarns == null)
-            {
-                _bWarns = new PatternTelegraph[_bRoots.Length];
-                for (int _k = 0; _k < _bWarns.Length; _k++) _bWarns[_k] = new PatternTelegraph("Telegraph_PattenB_" + (_k + 1), TelegraphStyle.Crack, _warnCrackColor, Color.black, transform);
-            }
-            if (_dWarn == null) _dWarn = new PatternTelegraph("Telegraph_PattenD", TelegraphStyle.SunSeal, _dSealColor, _dSealHeatColor, transform);
+            if (_warns.Length > 0) return;
+            // B·C·D(B 함정 수가 5개를 넘으면 그만큼), A(제단·계단을 덮음), E 5줄(화면을 덮지 않게 면을 어둡게)
+            int _n = Mathf.Max(5, _bRoots.Length);
+            _warns = new RangeTelegraph[_n + 6];
+            for (int _i = 0; _i < _n; _i++) _warns[_i] = new RangeTelegraph("RangeTelegraph_" + _i, transform, _rangeLineColor, _rangeCrackColor);
+            SampleAltar();
+            _warns[_n] = new RangeTelegraph("RangeTelegraph_A", transform, _rangeLineColor, _rangeCrackColor, 1f, AltarHeight);
+            for (int _i = 0; _i < 5; _i++) _warns[_n + 1 + _i] = new RangeTelegraph("RangeTelegraph_E" + (_i + 1), transform, _rangeLineColor, _rangeCrackColor, 0.55f);
         }
+
+        // 파라오가 선 제단 둘레의 높이(A 예고가 제단·계단 위를 덮게). 한 번만 잰다
+        private const float ALTAR_STEP = 0.2f;
+        private const int ALTAR_HALF = 45;   // 파라오 둘레 ±9m
+        private float[,] _altar;
+
+        private void SampleAltar()
+        {
+            int _n = ALTAR_HALF * 2 + 1;
+            var _raw = new float[_n, _n];
+            var _hits = new RaycastHit[16];
+            float _top = _pharaoh.position.y + 0.3f, _floor = _grid.FloorTopY;
+            for (int _z = 0; _z < _n; _z++)
+                for (int _x = 0; _x < _n; _x++)
+                {
+                    float _h = _floor;
+                    var _from = new Vector3(_pharaoh.position.x + (_x - ALTAR_HALF) * ALTAR_STEP, _top, _pharaoh.position.z + (_z - ALTAR_HALF) * ALTAR_STEP);
+                    int _c = Physics.RaycastNonAlloc(_from, Vector3.down, _hits, _top - _floor, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+                    for (int _i = 0; _i < _c; _i++)
+                    {
+                        var _col = _hits[_i].collider;   // 움직이는 것(Player·미라 등)은 빼고 지형만
+                        if (_col.attachedRigidbody || _col is CharacterController || _col.transform.IsChildOf(_pharaoh)) continue;
+                        _h = Mathf.Max(_h, _hits[_i].point.y);
+                    }
+                    _raw[_x, _z] = _h;
+                }
+            // 계단 모서리에 묻히지 않게 이웃 중 가장 높은 값으로
+            _altar = new float[_n, _n];
+            for (int _z = 0; _z < _n; _z++)
+                for (int _x = 0; _x < _n; _x++)
+                {
+                    float _h = _floor;
+                    for (int _dz = Mathf.Max(0, _z - 1); _dz <= Mathf.Min(_n - 1, _z + 1); _dz++)
+                        for (int _dx = Mathf.Max(0, _x - 1); _dx <= Mathf.Min(_n - 1, _x + 1); _dx++) _h = Mathf.Max(_h, _raw[_dx, _dz]);
+                    _altar[_x, _z] = _h;
+                }
+        }
+
+        private float AltarHeight(Vector3 _p)
+        {
+            float _x = (_p.x - _pharaoh.position.x) / ALTAR_STEP + ALTAR_HALF, _z = (_p.z - _pharaoh.position.z) / ALTAR_STEP + ALTAR_HALF;
+            int _ix = Mathf.FloorToInt(_x), _iz = Mathf.FloorToInt(_z);
+            if (_ix < 0 || _iz < 0 || _ix >= ALTAR_HALF * 2 || _iz >= ALTAR_HALF * 2) return _grid.FloorTopY;
+            float _a = Mathf.Lerp(_altar[_ix, _iz], _altar[_ix + 1, _iz], _x - _ix), _b = Mathf.Lerp(_altar[_ix, _iz + 1], _altar[_ix + 1, _iz + 1], _x - _ix);
+            return Mathf.Lerp(_a, _b, _z - _iz);
+        }
+
+        /// <summary>바닥 예고를 모두 바로 끈다(클리어 연출 시작 등).</summary>
+        public void HideTelegraphs() { foreach (var _w in _warns) _w.Hide(); }
+
+        private void OnDisable() { HideTelegraphs(); }
+
+        private void Strike(int _i, float _hold = 0f)
+        {
+            if ((_warned & (1 << _i)) != 0) return;
+            _warned |= 1 << _i;
+            _warns[_i].Strike(_hold);
+        }
+
+        private Vector3 Ground(Vector3 _p) { return new Vector3(_p.x, _grid.FloorTopY, _p.z); }
 
         // ---------- 착탄·파괴 이펙트 ----------
         private PatternImpactFx _fxA, _fxC, _fxE;
@@ -614,30 +676,135 @@ namespace HistoryCrash.Boss
             _shardFading = false;
         }
 
-        private static float Pulse(float _t, float _hz) { return 0.7f + 0.3f * Mathf.Sin(_t * _hz * Mathf.PI * 2f * 0.5f); }
-
         private void UpdateTelegraphs()
         {
-            if (_current == (int)BossPattern.B && _bWarns != null)
+            foreach (var _w in _warns) _w.Tick(Time.deltaTime);
+            switch (_current)
             {
-                float _u = _castTime / _bWarnHideAt;
-                for (int _k = 0; _k < _bWarns.Length; _k++)
+                case (int)BossPattern.A: WarnA(); break;
+                case (int)BossPattern.B: WarnTraps(_bWarnTime + _castTime); break;
+                case (int)BossPattern.C: WarnC(); break;
+                case (int)BossPattern.D: WarnD(); break;
+                case (int)BossPattern.E: WarnE(); break;
+            }
+        }
+
+        // A: 파라오 발밑에서 코페쉬가 떨어질 자리까지. 발사 전에는 파라오를 중심으로 Player를 따라 돌고, 발사되면 그 방향으로 고정
+        private void WarnA()
+        {
+            if (_castTime < _aWarnStart) return;
+            int _w = _warns.Length - 6;
+            if (_flightA.Done || (_flightA.Active && _flightA.Traveled >= _flightA.HitDist)) { Strike(_w); return; }
+            Vector3 _from = _flightA.Active ? _flightA.Start : _copesh.position, _dir = _flightA.Dir;
+            float _total = _flightA.Total;
+            if (!_flightA.Active)
+            {
+                Vector3 _d = _player.position - _from;
+                _dir = _d.normalized;
+                _total = FlightTotal(_from, _dir, _d.magnitude, _aOvershoot, out _);
+            }
+            var _mf = _copesh.GetComponent<MeshFilter>();
+            float _radius = _mf.sharedMesh.bounds.extents.magnitude * Mathf.Abs(_copesh.lossyScale.x);   // 빙글빙글 도는 날의 반지름
+            Vector3 _flat = new Vector3(_dir.x, 0f, _dir.z).normalized;
+            Vector3 _end = Ground(_from + _dir * _total) + _flat * _radius;
+            Vector3 _start = Ground(_pharaoh.position);
+            _start += (_end - _start).normalized * 0.4f;
+            // 발밑은 좁게(제단 위는 코페쉬가 높이 떠 있어 맞지 않음), 바닥에 닿을 즈음 실제 폭으로
+            _warns[_w].PlaceLane(_start, _end, _radius * 2f, 0.6f, 1.2f, Mathf.Min(6.5f, (_end - _start).magnitude * 0.6f));
+            _warns[_w].Set(_flightA.Active ? 0.7f + 0.3f * _flightA.Traveled / _flightA.HitDist : 0.7f * Mathf.InverseLerp(_aWarnStart, _aLaunchTime, _castTime));
+        }
+
+        // B: 함정이 솟을 자리. _t = 예고가 시작된 뒤의 시간(시전 전 예고 + 시전)
+        private void WarnTraps(float _t)
+        {
+            for (int _k = 0; _k < _bRoots.Length; _k++)
+            {
+                if (!_bRoots[_k].gameObject.activeSelf) continue;   // 칸이 모자라 쉬는 함정
+                if (_t >= _bWarnTime + _bWarnHideAt) { Strike(_k); continue; }
+                if ((_warned & (1 << _k)) != 0) continue;
+                if (!_warns[_k].On || _warns[_k].Ending)
                 {
-                    if (_castTime < _bWarnHideAt && _bRoots[_k].gameObject.activeSelf) _bWarns[_k].Set(0.85f * Pulse(_castTime, 10f), Mathf.Lerp(0.85f, 1f, _u));
-                    else _bWarns[_k].Hide();
+                    var _b = _bRoots[_k].Find("Sebeke_Trap_PattenB").GetComponent<Renderer>().bounds;
+                    _warns[_k].Hide();
+                    // 함정은 세워진 채 솟아 바닥 폭이 얇으므로(0.9m) Player 몸 크기까지 더해 보여 준다
+                    _warns[_k].PlaceBox(Ground(_bRoots[_k].position), _b.size.x + _playerRadius * 2f, _b.size.z + _playerRadius * 2f);
                 }
+                _warns[_k].Set(_t / (_bWarnTime + _bWarnHideAt));
             }
-            if (_current == (int)BossPattern.D && _dWarn != null)
+        }
+
+        // C: 보석이 터질 자리. 발사 전에는 Player 발밑, 발사되면 그때 위치로 고정
+        private void WarnC()
+        {
+            for (int _i = 0; _i < 5; _i++)
             {
-                if (_castTime >= _dBreakTime) { _dWarn.Hide(); return; }
-                // 점점 밝아지고 낙하가 가까울수록 빠르게 맥동
-                float _u = Mathf.InverseLerp(_dWarnStart, _dFallStart, _castTime);
-                float _k = _castTime < _dWarnStart ? 0f : Mathf.Lerp(0.2f, 0.9f, _u * _u);
-                if (_castTime >= _dFallStart) _k = 1.15f;
-                // 진행도: 낙하 시작까지 0→0.85, 낙하 중 0.85→1(그림자와 열기가 가장 짙어짐)
-                float _prog = _castTime < _dFallStart ? _u * 0.85f : Mathf.Lerp(0.85f, 1f, Mathf.InverseLerp(_dFallStart, _dBreakTime, _castTime));
-                _dWarn.Set(_k * Pulse(_castTime, 1.5f + 6f * _u), _prog);
+                float _from = _i == 0 ? _cLaunchTimes[0] - _cWarnLead : _cLaunchTimes[_i - 1];
+                PatternFlight _f = _flightC[_i];
+                if (_castTime < _from) continue;
+                if (_f.Done) { Strike(_i); continue; }
+                _warns[_i].PlaceCircle(Ground(_f.Active ? _f.Start + _f.Dir * _f.Total : _player.position), _cBlastRadius);
+                _warns[_i].Set(_f.Active ? 0.5f + 0.5f * _f.Traveled / _f.Total : 0.5f * Mathf.InverseLerp(_from, _cLaunchTimes[_i], _castTime));
             }
+        }
+
+        // D: 태양이 떨어질 자리(태양 반지름)
+        private void WarnD()
+        {
+            if (_castTime < _dWarnStart) return;
+            if (_castTime >= _dBreakTime) { Strike(0); return; }
+            _warns[0].PlaceCircle(Ground(_sunRoot.position), _sunRadius);
+            _warns[0].Set(Mathf.InverseLerp(_dWarnStart, _dBreakTime, _castTime));
+        }
+
+        private readonly Vector3[] _eShown = new Vector3[5], _eVel = new Vector3[5];   // 화면에 그리는 줄(x = 시작 x, y = 끝 x, z = 줄 z)
+
+        // E: 지팡이가 지나갈 줄. 발사 전에는 Player를 따라가고, 발사된 지팡이는 그 줄로 고정.
+        // 실제 줄은 칸 단위로 바뀌므로 그대로 그리면 툭툭 끊긴다 → 발사 전에는 Player의 실제 위치를 부드럽게 따라가고, 발사되면 실제 줄로 빠르게 맞춘다
+        private void WarnE()
+        {
+            int _first = _warns.Length - 5;
+            for (int _i = 0; _i < 5; _i++)
+            {
+                int _w = _first + _i;
+                float _from = _eLaunchTimes[_i] - _eWarnLead;
+                if (_castTime < _from || (_warned & (1 << _w)) != 0) continue;
+                if (_eBroken[_i]) { _warned |= 1 << _w; _warns[_w].FadeOut(); continue; }
+                float _z = _eLaunched[_i] ? _staffs[_i].position.z : _player.position.z + _eLaneCells[_i] * _grid.TileSize;
+                if (!StaffLane(_z, out float _x0, out float _x1)) { _warns[_w].FadeOut(); continue; }   // 바닥 밖 줄
+                Vector3 _goal = new Vector3(_x0, _x1, _z);
+                Vector3 _lane = _eShown[_i];
+                if (_warns[_w].On)   // 줄은 바로 따라가고, 기둥에 막혀 바뀌는 길이는 천천히
+                {
+                    _lane.x = Mathf.SmoothDamp(_lane.x, _goal.x, ref _eVel[_i].x, 0.2f);
+                    _lane.y = Mathf.SmoothDamp(_lane.y, _goal.y, ref _eVel[_i].y, 0.2f);
+                    _lane.z = Mathf.SmoothDamp(_lane.z, _goal.z, ref _eVel[_i].z, _eLaunched[_i] ? 0.04f : 0.08f);
+                }
+                else { _lane = _goal; _eVel[_i] = Vector3.zero; }
+                _eShown[_i] = _lane;
+                _warns[_w].PlaceLane(new Vector3(_lane.x, _grid.FloorTopY, _lane.z), new Vector3(_lane.y, _grid.FloorTopY, _lane.z), _eStaffSize.x, (_lane.y - _lane.x) * 0.14f);
+                if (!_eLaunched[_i]) { _warns[_w].Set(0.6f * Mathf.InverseLerp(_from, _eLaunchTimes[_i], _castTime)); continue; }
+                // 지팡이 끝이 Player 앞까지 오면 공격, 꼬리가 지나갈 때까지 남는다
+                float _tip = _staffs[_i].position.x + _eDirSign[_i] * _roots[4].forward.x * _eStaffSize.y * 0.5f;
+                float _u = Mathf.InverseLerp(_eLaunchPos[_i].x, _player.position.x, _tip);
+                if (_u >= 1f) Strike(_w, _eStaffSize.y / 16f / _tempo);   // 지팡이 속도 약 16m/s(클립)
+                else _warns[_w].Set(0.6f + 0.4f * _u);
+            }
+        }
+
+        // E 지팡이가 날아갈 줄에서 바닥이 있는 구간(제단 앞 ~ 처음 막히는 벽·기둥)
+        private bool StaffLane(float _z, out float _x0, out float _x1)
+        {
+            float _tile = _grid.TileSize, _origin = _roots[4].position.x;
+            _x0 = _x1 = 0f; bool _has = false;
+            for (float _d = 0f; _d < 80f; _d += _tile)
+            {
+                var _cell = _grid.WorldToCell(new Vector3(_origin + _d, 0f, _z));
+                bool _ok = _grid.IsWalkable(_cell);
+                if (_ok && !_has) { _has = true; _x0 = _grid.CellCenter(_cell, 0f).x - _tile * 0.5f; }
+                if (_ok) _x1 = _grid.CellCenter(_cell, 0f).x + _tile * 0.5f;
+                else if (_has && _d > _eArmDistance) break;   // 발사 직후 구간은 막힘을 보지 않음(CheckStaffBreak와 같음)
+            }
+            return _has && _x1 - _x0 > 1f;
         }
 
         // D 태양은 비볼록 MeshCollider라 Player가 구체 안쪽에 들어가면 겹침으로 잡히지 않는다.
@@ -697,6 +864,7 @@ namespace HistoryCrash.Boss
                 if (!_dDropped && _castTime >= _dBreakTime) { _dDropped = true; DropStaff(3, _sunRoot.position); }   // D: 낙하 지점
             }
             if (_current == (int)BossPattern.E) ApplyStaffLanes();
+            UpdateTelegraphs();   // 투사체 위치가 정해진 뒤
             CheckHits();
             CheckSunVolumeHit();
 
@@ -760,15 +928,9 @@ namespace HistoryCrash.Boss
                 Vector3 _d = _target - _f.Start;
                 _f.HitDist = _d.magnitude;
                 _f.Dir = _f.HitDist > 1e-3f ? _d / _f.HitDist : Vector3.forward;
-                _f.Total = _f.HitDist + _overshoot;
                 _f.Traveled = 0;
-                // A: 아래로 비스듬히 날아가므로, Player 위치를 지나 그대로 바닥에 닿을 때까지 직선으로 날아가 깨진다
-                _f.Straight = false;
-                if (_overshoot > 0f && _f.Dir.y < -0.05f)
-                {
-                    float _toFloor = (_f.Start.y - (_grid.FloorTopY + _aFloorClearance)) / -_f.Dir.y;
-                    if (_toFloor > _f.HitDist) { _f.Total = Mathf.Min(_toFloor, _f.HitDist + _aMaxPastPlayer); _f.Straight = true; }
-                }
+                _f.Total = FlightTotal(_f.Start, _f.Dir, _f.HitDist, _overshoot, out bool _straight);
+                _f.Straight = _straight;
                 if (_debugLog) Debug.Log(string.Format("[BossPattern] Launch {0} castT={1:F2} dist={2:F1}m speed={3}m/s eta={4:F2}s", _t.name, _castTime, _f.HitDist, _speed, _f.HitDist / _speed));
             }
             if (_f.Active)
@@ -787,6 +949,18 @@ namespace HistoryCrash.Boss
             // 착탄 후에는 숨긴다(깨지는 이펙트는 LateUpdate에서 한 번만 낸다)
             if (_f.Done) _t.localScale = Vector3.zero;
             return true;
+        }
+
+        // A: 아래로 비스듬히 날아가므로, Player 위치를 지나 그대로 바닥에 닿을 때까지 직선으로 날아가 깨진다
+        private float FlightTotal(Vector3 _start, Vector3 _dir, float _hitDist, float _overshoot, out bool _straight)
+        {
+            _straight = false;
+            if (_overshoot > 0f && _dir.y < -0.05f)
+            {
+                float _toFloor = (_start.y - (_grid.FloorTopY + _aFloorClearance)) / -_dir.y;
+                if (_toFloor > _hitDist) { _straight = true; return Mathf.Min(_toFloor, _hitDist + _aMaxPastPlayer); }
+            }
+            return _hitDist + _overshoot;
         }
 
         private static void ScaleZ(Transform _t, float _k)
