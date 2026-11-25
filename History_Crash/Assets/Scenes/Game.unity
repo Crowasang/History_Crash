@@ -3906,6 +3906,7 @@ MonoBehaviour:
   _perGap: 1
   _spawnSpread: 1
   _spawnCells: []
+  _spawnCenter: {fileID: 1400371381}
   _flameTime: 0.9
   _riseTime: 0.6
   _footOffset: 0.07
@@ -43002,6 +43003,37 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 743ff08bc32faf041b3ba60b2ed3ef44, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SceneLoader
+--- !u!1 &1400371380
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1400371381}
+  m_Layer: 0
+  m_Name: MummySpawnPoint
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1400371381
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1400371380}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 6.8, y: 0.1, z: 19}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
@@ -43024,3 +43056,4 @@ SceneRoots:
   - {fileID: 1965269511}
   - {fileID: 593189370}
   - {fileID: 1924001041}
+  - {fileID: 1400371381}
