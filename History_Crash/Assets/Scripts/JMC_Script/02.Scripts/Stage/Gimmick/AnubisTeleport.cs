@@ -148,6 +148,7 @@ namespace HistoryCrash.Stage
             var _decal = MakeDecal(_fx, _destPos + Vector3.up * 0.02f);
             var _circle = _decal != null ? new List<LineRenderer>() : MagicCircle(_fx, _destPos + Vector3.up * 0.02f);
             _decalAngle = Random.Range(0f, 360f);
+            HistoryCrash.Sound.GameSfx.Play("Anubis_Warning", _top);   // 끌려감·착지 소리는 GameSfx가 IForcedMovable 알림으로 냄
 
             for (float _t = 0; _t < _warnTime; _t += Time.deltaTime)
             {

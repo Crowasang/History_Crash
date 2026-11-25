@@ -40,6 +40,8 @@ namespace HistoryCrash.Combat
             var _s = _go.AddComponent<PlayerStaffSkill>();
             _s._pattern = _pattern; _s._element = _e; _s._player = _player; _s._dir = _dir; _s._grid = _grid; _s._visualSrc = _patternVisual;
             ElementFx.Burst(_e, _player.position + Vector3.up * 0.4f + _dir * 0.4f, 0.7f, 16);
+            // B는 함정이 솟아 때릴 때 따로 냄. D는 착탄(1.30초)에 맞춰 조금 늦게
+            if (_pattern != 1) HistoryCrash.Sound.GameSfx.Play("Player_Attack" + "ABCDE"[Mathf.Clamp(_pattern, 0, 4)], _pattern == 3 ? 0.2f : 0f);
             switch (_pattern)
             {
                 case 0: _s.StartCoroutine(_s.RunA()); break;
@@ -194,6 +196,7 @@ namespace HistoryCrash.Combat
                     if (!_m || !_m.IsAlive || !_m.Active || _m.Element != _element) continue;
                     Vector3 _d = _m.transform.position - _pos; _d.y = 0;
                     if (_d.magnitude > B_TRIGGER) continue;
+                    HistoryCrash.Sound.GameSfx.Play("Player_AttackB", _pos);
                     for (float _t = 0; _t < 0.12f; _t += Time.deltaTime)
                     {
                         float _u = _t / 0.12f;

@@ -120,6 +120,7 @@ namespace HistoryCrash.Cutscene
             BuildUI();
             BuildVolume();
             StageBgm.FadeOut(0.6f);
+            HistoryCrash.Sound.GameSfx.StopAll(0.3f);
             foreach (var _a in FindObjectsByType<AudioSource>(FindObjectsSortMode.None)) if (_a.GetComponent<BossIntroCutscene>()) _a.Stop();
             _mix = NewAudio("GameOver_Mix", false); _loop = NewAudio("GameOver_Loop", true);
         }

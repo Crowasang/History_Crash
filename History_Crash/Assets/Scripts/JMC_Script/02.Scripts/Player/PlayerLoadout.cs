@@ -194,6 +194,7 @@ namespace HistoryCrash.Player
         private System.Collections.IEnumerator CastRoutine(int _staff, Element _orb)
         {
             IsCasting = true;
+            HistoryCrash.Sound.GameSfx.Play("Player_Cast");
             SpeedScale = _castMoveSpeedScale;   // 시전 중에도 이동 가능(느리게)
             float _wait = 0.1f;
             string _standState = _animator && _staff >= 0 && _staff < _castStates.Length ? _castStates[_staff] : null;
