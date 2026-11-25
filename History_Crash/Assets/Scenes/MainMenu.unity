@@ -382,6 +382,7 @@ MonoBehaviour:
   _state: 0
   _crossFade: 0.35
   _testFromIntroEnd: 0
+  _logoClip: {fileID: 32900000, guid: 31a86dce72068d9448a48cbf6a9db62e, type: 3}
   _titlePos: {x: 90, y: 120}
   _titleSize: 120
   _menuPos: {x: 1560, y: 470}
