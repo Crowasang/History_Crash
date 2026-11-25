@@ -142,6 +142,7 @@ namespace HistoryCrash.Cutscene
             BuildUI();
             StageBgm.FadeOut(1f);
             HistoryCrash.Sound.GameSfx.StopAll(0.3f);
+            var _patterns = FindFirstObjectByType<HistoryCrash.Boss.BossPatternDirector>(); if (_patterns) _patterns.HideTelegraphs();   // 공격 예고가 멈춘 채 남지 않게
             foreach (var _a in FindObjectsByType<AudioSource>(FindObjectsSortMode.None)) if (_a.GetComponent<BossIntroCutscene>()) _a.Stop();
             _mix = gameObject.AddComponent<AudioSource>(); _mix.clip = Resources.Load<AudioClip>(RES + "Clear_Mix");
             _mix.playOnAwake = false; _mix.spatialBlend = 0f; _mix.ignoreListenerPause = true; _mix.volume = BossIntroCutscene.Volume();
