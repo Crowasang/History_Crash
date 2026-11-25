@@ -50,6 +50,14 @@ namespace HistoryCrash.Stage
         [SerializeField, FormerlySerializedAs("circleWidth")] private float _circleWidth = 0.035f;
         [SerializeField, Tooltip("텍스처 마법진(아누비스의 자기 선언) 지름(m). 텍스처가 없으면 위의 선 마법진을 씀")] private float _decalDiameter = 2.4f;
 
+        [Header("타워 부서짐(텔레포트 1회마다 그 타워가 부서지고, 모두 부서지면 잠시 뒤 다시 세워짐)")]
+        [SerializeField, Tooltip("모든 타워가 부서진 뒤 다시 세워지기까지(초)")] private float _rebuildDelay = 15f;
+        [SerializeField, Tooltip("부서지는 애니메이션 길이(초). 끝날 때까지 다음 단계를 기다림")] private float _breakTime = 1f;
+        [SerializeField, Tooltip("다시 세워지는 애니메이션 길이(초)")] private float _rebuildTime = 1f;
+        [SerializeField, Tooltip("타워 Animator의 부서짐 트리거 이름")] private string _breakTrigger = "Break";
+        [SerializeField, Tooltip("타워 Animator의 다시 세워짐 트리거 이름")] private string _rebuildTrigger = "Rebuild";
+        private readonly HashSet<Transform> _broken = new HashSet<Transform>();
+
         public string Status { get; private set; } = "";
 
         private readonly List<Renderer> _eyes = new List<Renderer>();
@@ -74,7 +82,8 @@ namespace HistoryCrash.Stage
             if (!_root || _grid == null) return;
             foreach (Transform _c in _root.transform)
             {
-                if (_c.name.Contains("East")) continue;   // 제단 쪽(파라오 뒤) 기둥 제외
+                // 경기장 안쪽 타워(Zedtop) 6개만: 벽 쪽 큰 기둥과 제단 쪽(파라오 뒤) 기둥은 제외
+                if (!_c.name.StartsWith("Zedtop")) continue;
                 _pillars.Add(_c);
             }
         }
@@ -112,6 +121,7 @@ namespace HistoryCrash.Stage
             while (true)
             {
                 yield return Trigger();
+                if (_pillars.Count > 0 && _broken.Count >= _pillars.Count) yield return RebuildAll();   // 6개 다 부서지면 잠시 뒤 다시 세움
                 float _wait = Mathf.Max(0f, _period - _warnTime - _pullTime);
                 for (float _t = _wait; _t > 0f; _t -= Time.deltaTime) { Status = "Anubis: next in " + _t.ToString("F1") + "s"; yield return null; }
             }
@@ -131,7 +141,10 @@ namespace HistoryCrash.Stage
         {
             // 1) 기둥과 도착 칸 고르기: 기둥 아래 칸에서 가장 가까운 안전한 칸
             //    호루스 붕괴로 사라졌거나 곧 사라질 칸(경고·붕괴·수복 중)은 제외
-            Transform _pillar = _pillars[Random.Range(0, _pillars.Count)];
+            //    아직 서 있는 타워 중에서만 고름
+            var _intact = _pillars.FindAll(_p => _p && !_broken.Contains(_p));
+            if (_intact.Count == 0) yield break;
+            Transform _pillar = _intact[Random.Range(0, _intact.Count)];
             Bounds _pb = Bounds(_pillar);
             var _pillarCell = _grid.WorldToCell(new Vector3(_pb.center.x, 0, _pb.center.z));
             var _dest = PickDest(_pillarCell);
@@ -192,8 +205,43 @@ namespace HistoryCrash.Stage
             SetEyes(0f); SetPillarGlow(_prs, 1f);
             var _fem = _flame.emission; _fem.rateOverTime = 0; _flame.transform.SetParent(null, true); Destroy(_flame.gameObject, 1.5f);
             Destroy(_fx.gameObject);
+
+            // 5) 끌어당긴 타워가 부서짐
+            yield return BreakTower(_pillar);
             Status = "";
         }
+
+        // ---------- 타워 부서짐·다시 세워짐 ----------
+        // 타워 자리는 부서져도 계속 막힘(타워 충돌체는 그대로 둠). 잔해는 통과할 수 있어야 하므로 애니메이션의 잔해에는 충돌체를 넣지 않음.
+        // 타워에 Animator가 있으면 Break/Rebuild 트리거로 애니메이션을 재생함(무너진 모습 그대로 남아 있음).
+        // 애니메이션이 아직 없으면 타워는 그대로 두고 파티클만 터뜨림.
+        private IEnumerator BreakTower(Transform _tower)
+        {
+            _broken.Add(_tower);
+            var _anim = _tower.GetComponentInChildren<Animator>();
+            if (_anim) _anim.SetTrigger(_breakTrigger);
+            else BurstAt(Bounds(_tower).center);
+            Debug.Log("[Anubis] Tower broken: " + _tower.name + " (" + _broken.Count + "/" + _pillars.Count + ")");
+            for (float _t = 0; _t < _breakTime; _t += Time.deltaTime) yield return null;
+        }
+
+        private IEnumerator RebuildAll()
+        {
+            for (float _t = _rebuildDelay; _t > 0f; _t -= Time.deltaTime) { Status = "Anubis: towers rebuild in " + _t.ToString("F1") + "s"; yield return null; }
+            foreach (var _tower in _broken)
+            {
+                if (!_tower) continue;
+                var _anim = _tower.GetComponentInChildren<Animator>();
+                if (_anim) _anim.SetTrigger(_rebuildTrigger);
+            }
+            for (float _t = 0; _t < _rebuildTime; _t += Time.deltaTime) { Status = "Anubis: towers rebuilding"; yield return null; }
+            _broken.Clear();
+            Debug.Log("[Anubis] Towers rebuilt");
+        }
+
+        /// <summary>테스트용: 부서진 타워 수와 전체 수</summary>
+        public int BrokenCount => _broken.Count;
+        public int TowerCount => _pillars.Count;
 
         // ---------- 도착 칸 ----------
         /// <summary>도착 칸과 주변 8칸이 모두 서 있을 수 있고, 호루스 붕괴 대상(경고·붕괴·수복 중)이 아님</summary>
