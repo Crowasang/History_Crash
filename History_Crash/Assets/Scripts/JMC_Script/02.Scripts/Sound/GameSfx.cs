@@ -40,7 +40,7 @@ namespace HistoryCrash.Sound
             { "Player_Hit_Leather", (0.75f, Space.Flat) }, { "Player_hit_voice", (0.85f, Space.Flat) }, { "Player_Walk", (0.55f, Space.Flat) },
             // 기믹
             { "Horus_Warning", (0.70f, Space.Flat) }, { "Horus_Collapse", (0.80f, Space.Flat) }, { "Horus_Restore", (0.70f, Space.Flat) },
-            { "Anubis_Warning", (0.75f, Space.Half) }, { "Anubis_Pull", (0.75f, Space.Flat) }, { "Anubis_Land", (0.80f, Space.Flat) },
+            { "Anubis_Warning", (0.50f, Space.Half) }, { "Anubis_Pull", (0.40f, Space.Flat) }, { "Anubis_Land", (0.48f, Space.Flat) },
         };
         private const float STRIDE = 1.8f;        // 발걸음 간격(m): 걷기 4m/s → 0.45초, 달리기 6.4m/s → 0.28초
         private const int MAX_VOICES = 40;
