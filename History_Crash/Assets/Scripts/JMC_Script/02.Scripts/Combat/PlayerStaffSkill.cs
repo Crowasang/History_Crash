@@ -17,7 +17,7 @@ namespace HistoryCrash.Combat
     /// - A: 코페쉬가 Player 주위를 돌며 근접 공격
     /// - B: 조준한 바닥 지점에 함정 설치, 같은 속성 머미가 밟으면 솟아 공격
     /// - C: 클릭한 순간의 방향으로 보석 3연발
-    /// - D: 조준한 바닥 지점에 범위를 줄인 태양 낙하
+    /// - D: Player 현재 위치에 범위를 줄인 태양 낙하
     /// - E: 클릭한 순간의 방향으로 창 2개 관통 사출
     /// </summary>
     public class PlayerStaffSkill : MonoBehaviour
@@ -33,14 +33,14 @@ namespace HistoryCrash.Combat
         private Element _element; private int _pattern; private Transform _player; private Vector3 _dir; private Vector3 _target; private TileGrid _grid; private Transform _visualSrc;
         private readonly HashSet<Mummy> _hit = new HashSet<Mummy>();
 
-        /// <summary>공격 발동. 지점을 따로 정하지 않으면 플레이어 발밑(B·D)</summary>
+        /// <summary>공격 발동. 지점을 따로 정하지 않으면 플레이어 발밑(B)</summary>
         public static void Cast(int _pattern, Element _e, Transform _player, Vector3 _dir, TileGrid _grid, Transform _patternVisual)
         {
             Cast(_pattern, _e, _player, _dir, _player.position, _grid, _patternVisual);
         }
 
         /// <param name="_dir">C·E 발사 방향(클릭한 순간 고정, 시전 중 화면을 돌려도 바뀌지 않음)</param>
-        /// <param name="_target">B·D 설치·낙하 지점(PlayerAttackAim이 정함)</param>
+        /// <param name="_target">B 설치 지점(PlayerAttackAim이 정함)</param>
         public static void Cast(int _pattern, Element _e, Transform _player, Vector3 _dir, Vector3 _target, TileGrid _grid, Transform _patternVisual)
         {
             var _go = new GameObject("PlayerSkill_" + "ABCDE"[Mathf.Clamp(_pattern, 0, 4)] + "_" + ElementInfo.Name(_e));
@@ -315,13 +315,13 @@ namespace HistoryCrash.Combat
         }
 
         // ---------- D: 축소판 태양 낙하 ----------
-        // 조준 지점 위에 오브가 생겨 잠시 떠 있는 동안, 바닥에 타격 범위(D_Radius)만 한 마법진이 그려지고
+        // 시전 위치(Player 현재 위치) 위에 오브가 생겨 잠시 떠 있는 동안, 바닥에 타격 범위(D_Radius)만 한 마법진이 그려지고
         // 이후 오브가 마법진 중앙으로 떨어져 범위 안 같은 속성 머미를 맞힘. 마법진 바깥 고리 = 실제 타격 범위.
         public const float D_GROW = 0.2f, D_HOVER = 0.55f, D_DRAW = 0.35f;
 
         private IEnumerator RunD()
         {
-            Vector3 _ground = _target; _ground.y = FloorY;   // 조준한 지점
+            Vector3 _ground = _player.position; _ground.y = FloorY;
             transform.position = _ground;
             Color _c = ElementInfo.Color(_element);
             SkillMagicCircle _circle = MagicCircle(transform, D_RADIUS, _c);
@@ -366,7 +366,7 @@ namespace HistoryCrash.Combat
 
         // ---------- 마법진(LineRenderer) ----------
         private static Material _lineMat;
-        public static Material LineMat()
+        private static Material LineMat()
         {
             if (_lineMat) return _lineMat;
             _lineMat = new Material(Shader.Find("Universal Render Pipeline/Particles/Unlit")) { name = "PlayerSkill_CircleLine" };

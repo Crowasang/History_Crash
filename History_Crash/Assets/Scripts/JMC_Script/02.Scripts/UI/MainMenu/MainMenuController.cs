@@ -251,13 +251,17 @@ namespace HistoryCrash.UI
         private static readonly Color INK = new Color32(30, 16, 4, 255);   // 밝게 보정한 종이 위에서 잘 읽히게 진하고 불투명하게
 
         // ---- 도감 종이를 밝은 양피지로 보정(스토리 영상·조작법·튜토리얼 바탕). ESC 설정창 도감과 같은 색감 ----
-        private Material _parchment, _parchVideo;
-        private Material Parchment()
+        private Material _parchment;
+        private Material Parchment() { if (!_parchment) _parchment = NewParchment("MainMenu_Parchment"); return _parchment; }
+
+        /// <summary>도감 페이지만 밝게 보정하는 재질(표지·책상은 그대로). Assets/Art/Resources/UI/MainMenu/</summary>
+        internal static Material NewParchment(string _name)
         {
-            if (_parchment) return _parchment;
-            var _sh = Resources.Load<Shader>("HistoryCrash_UIParchment");   // Assets/Shaders/Resources/
-            if (_sh) _parchment = new Material(_sh) { name = "MainMenu_Parchment" };
-            return _parchment;
+            var _sh = Resources.Load<Shader>("UI/MainMenu/BookParchment");
+            if (!_sh) return null;
+            var _m = new Material(_sh) { name = _name };
+            _m.SetTexture("_Mask", Resources.Load<Texture2D>("UI/MainMenu/BookPageMask"));
+            return _m;
         }
 
         // ---- 책장 넘길 때 소리 ----
@@ -599,7 +603,6 @@ namespace HistoryCrash.UI
             _nextRibbon = MakeRibbon(_box, "NextRibbon", RIGHT_RIBBON_PX, SkipIntro, out _unused);
             _backRibbon = MakeRibbon(_box, "BackRibbon", LEFT_RIBBON_PX, GoBackPage, out _backGroup);
             _backRibbon.texture = GameLanguage.IsKorean ? _ribbonBackKo : _ribbonBackEn;
-            SetRibbonLabel(_backRibbon, GameLanguage.T("이전 장", "Back"));
             SetNextRibbon(0);
             _backGroup.alpha = 0f; _backGroup.interactable = _backGroup.blocksRaycasts = false;
 
@@ -618,40 +621,8 @@ namespace HistoryCrash.UI
             var _img = _go.GetComponent<RawImage>(); _img.raycastTarget = true;
             _group = _go.GetComponent<CanvasGroup>();
             var _bm = _go.AddComponent<MainMenuBookmark>(); _bm.Clicked = _onClick; _bm.Hovered = PlayHover;
-            // 그림에 수놓인 글씨는 천 주름을 따라 휘어 읽기 어려워 지웠고, 그 자리에 반듯한 글자를 올림
-            var _lg = new GameObject("Label", typeof(RectTransform), typeof(TextMeshProUGUI));
-            _lg.transform.SetParent(_r, false);
-            var _lr = (RectTransform)_lg.transform;
-            Vector2 _c = _name == "BackRibbon" ? BACK_LABEL_UV : NEXT_LABEL_UV;
-            _lr.anchorMin = _lr.anchorMax = _c; _lr.pivot = new Vector2(0.5f, 0.5f);
-            _lr.anchoredPosition = Vector2.zero; _lr.sizeDelta = new Vector2(_px.width * 1.2f, 40f);
-            var _lt = _lg.GetComponent<TextMeshProUGUI>();
-            _lt.alignment = TextAlignmentOptions.Center; _lt.textWrappingMode = TextWrappingModes.NoWrap; _lt.overflowMode = TextOverflowModes.Overflow;
-            _lt.raycastTarget = false; _lt.color = RIBBON_TEXT;
-            _ribbonLabels[_img] = _lt;
             return _img;
         }
-
-        // 리본 위 글자 자리(리본 그림 안 비율, 왼쪽 아래 0,0) — 원래 수놓인 글씨가 있던 자리의 가운데
-        private static readonly Vector2 NEXT_LABEL_UV = new Vector2(0.39f, 0.55f), BACK_LABEL_UV = new Vector2(0.64f, 0.55f);
-        private static readonly Color RIBBON_TEXT = new Color32(240, 208, 140, 255);
-        private readonly Dictionary<RawImage, TextMeshProUGUI> _ribbonLabels = new Dictionary<RawImage, TextMeshProUGUI>();
-
-        /// <summary>리본 글자를 정함(한글이면 한글 글꼴). 진갈색 테두리로 천 위에서도 또렷하게</summary>
-        private void SetRibbonLabel(RawImage _img, string _s)
-        {
-            if (!_img || !_ribbonLabels.TryGetValue(_img, out var _t)) return;
-            _t.text = _s;
-            ApplyFont(_t, 25f);
-            _t.fontStyle = FontStyles.Bold;
-            if (_t.fontSharedMaterial && !_t.fontSharedMaterial.name.EndsWith("(Ribbon)"))
-            {
-                _t.fontMaterial = new Material(_t.fontSharedMaterial) { name = _t.fontSharedMaterial.name + " (Ribbon)" };
-                _t.outlineWidth = 0.22f; _t.outlineColor = new Color32(35, 18, 8, 255);
-            }
-        }
-
-        private static readonly string[] NEXT_KO = { "건너뛰기", "다음 장", "모험 시작" }, NEXT_EN = { "Skip", "Next page", "Begin" };
 
         /// <summary>우측 리본 그림을 바꿈: 0 건너뛰기, 1 다음 장, 2 모험 시작(설정 언어에 맞춰)</summary>
         private void SetNextRibbon(int _which)
@@ -659,14 +630,6 @@ namespace HistoryCrash.UI
             DOTween.Kill(_nextRibbon);   // 내려앉는 중에 글씨가 바뀌면 프레임 재생을 멈추고 바로 새 그림
             var _set = GameLanguage.IsKorean ? _ribbonNextKo : _ribbonNextEn;
             if (_set != null && _which >= 0 && _which < _set.Length && _set[_which]) _nextRibbon.texture = _set[_which];
-            var _names = GameLanguage.IsKorean ? NEXT_KO : NEXT_EN;
-            if (_which >= 0 && _which < _names.Length) SetRibbonLabel(_nextRibbon, _names[_which]);
-            ShowRibbonLabel(_nextRibbon, 1f);
-        }
-
-        private void ShowRibbonLabel(RawImage _img, float _alpha)
-        {
-            if (_img && _ribbonLabels.TryGetValue(_img, out var _t)) { _t.DOKill(); _t.alpha = _alpha; }
         }
 
         private void ShowBookmark(bool _on)
@@ -702,16 +665,11 @@ namespace HistoryCrash.UI
         {
             if (!_img) return;
             DOTween.Kill(_img);
-            if (_frames == null || _frames.Length == 0) { _img.texture = _still; ShowRibbonLabel(_img, 1f); return; }
+            if (_frames == null || _frames.Length == 0) { _img.texture = _still; return; }
             _img.texture = _frames[0];
-            ShowRibbonLabel(_img, 0f);   // 리본이 내려앉는 동안은 글자를 숨겼다가, 다 놓이면 나타남
             DOVirtual.Float(0f, _frames.Length, _drapeTime, _v => { int _i = Mathf.Min(_frames.Length - 1, (int)_v); if (_frames[_i]) _img.texture = _frames[_i]; })
                 .SetEase(Ease.Linear).SetUpdate(true).SetId(_img).SetLink(_img.gameObject)
-                .OnComplete(() =>
-                {
-                    _img.texture = _still;
-                    if (_ribbonLabels.TryGetValue(_img, out var _t)) { _t.alpha = 0f; _t.DOFade(1f, 0.2f).SetUpdate(true).SetLink(_t.gameObject); }
-                });
+                .OnComplete(() => _img.texture = _still);
         }
 
         public void Select(int _i)
@@ -816,16 +774,8 @@ namespace HistoryCrash.UI
                 var _prev = _as[1 - _back];
                 if (_prev.isPlaying) _prev.DOFade(0f, _audioFade).SetUpdate(true).SetLink(gameObject).OnComplete(_prev.Stop);
             }
-            // 스토리(인트로) 영상만 도감 종이를 밝게 보정: 줌인 영상에서 이어질 때 튀지 않게 0.8초에 걸쳐 서서히
-            bool _story = _clip == _introKo || _clip == _introEn;
-            if (_story && Parchment())
-            {
-                if (!_parchVideo) _parchVideo = new Material(Parchment()) { name = "MainMenu_ParchmentVideo" };
-                _parchVideo.DOKill(); _parchVideo.SetFloat("_Strength", 0f);
-                _parchVideo.DOFloat(1f, "_Strength", 0.8f).SetEase(Ease.InOutSine).SetUpdate(true).SetLink(gameObject);
-                _vimg[_back].material = _parchVideo;
-            }
-            else _vimg[_back].material = null;
+            // 스토리(인트로) 영상의 페이지를 밝게. 줌인 영상은 페이지가 이미 밝게 구워져 있어 바로 이어짐
+            _vimg[_back].material = _clip == _introKo || _clip == _introEn ? Parchment() : null;
             _vimg[_back].transform.SetAsLastSibling();
             int _old = _front; _front = _back;
             if (_fade > 0f) yield return Fade(_vimg[_back], 0f, 1f, _fade, true);

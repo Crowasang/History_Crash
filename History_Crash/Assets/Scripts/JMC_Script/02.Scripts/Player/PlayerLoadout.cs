@@ -51,7 +51,7 @@ namespace HistoryCrash.Player
             if (!_animator) _animator = GetComponentInChildren<Animator>();
             if (!_model && _animator) _model = _animator.transform;
             if (Camera.main) _camera = Camera.main.transform;
-            // 공격 조준·바닥 범위 표시 (씬에 없으면 붙임)
+            // 공격 조준 (씬에 없으면 붙임)
             _aim = GetComponent<PlayerAttackAim>();
             if (!_aim) _aim = gameObject.AddComponent<PlayerAttackAim>();
         }
@@ -175,8 +175,8 @@ namespace HistoryCrash.Player
         private void Attack()
         {
             if (IsCasting) return;
-            // 클릭한 순간의 조준(B·D 지점, C·E 방향)을 고정. 발동 시점은 모션에 맞춘 그대로
-            var _aimed = _aim.Lock(HeldStaff, HeldOrb);
+            // 클릭한 순간의 조준(B 지점, C·E 방향)을 고정. 발동 시점은 모션에 맞춘 그대로
+            var _aimed = _aim.Compute(HeldStaff);
             StartCoroutine(CastRoutine(HeldStaff, HeldOrb, _aimed));
             HeldStaff = -1; HasOrb = false;   // 1회용
         }
@@ -274,10 +274,8 @@ namespace HistoryCrash.Player
             // 공격으로 오브를 소비: 지팡이 홀의 오브가 터지며 사라짐(시전 중 새 오브를 주웠다면 그대로 둠)
             if (!HasOrb) { _heldOrbForFx = _heldOrb; ClearSocketOrb(true); }
 
-            // 고정해 둔 바닥 범위 표시를 지움. C·E는 소환 뒤 실제 발사까지 남겨 둠
-            _aim.Release(_heldStaff == 2 ? PlayerStaffSkill.C_SUMMON_LEAD : _heldStaff == 4 ? PlayerStaffSkill.E_SUMMON_LEAD : 0f);
             // 주운 스태프의 패턴을 약화판으로 사용(모양 = 패턴 오브젝트, 색·효과 = 오브 속성)
-            // 방향·지점은 클릭한 순간에 고정한 값(시전 중 화면을 돌려도 바뀌지 않음)
+            // 방향·지점은 클릭한 순간에 고정한 값(시전 중 화면을 돌려도 바뀌지 않음). D는 지점 대신 시전 위치를 씀
             if (!_director) _director = FindFirstObjectByType<BossPatternDirector>();
             PlayerStaffSkill.Cast(_heldStaff, _heldOrb, transform, _aimed.Dir, _aimed.Point, _grid, _director ? _director.PatternVisual(_heldStaff) : null);
             Debug.Log("[Loadout] Attack staff " + _staffNames[_heldStaff] + " + orb " + ElementInfo.Name(_heldOrb));

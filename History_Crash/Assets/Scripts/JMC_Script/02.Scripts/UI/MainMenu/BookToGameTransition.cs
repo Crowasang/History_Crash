@@ -54,8 +54,7 @@ namespace HistoryCrash.UI
             // 지금 화면과 똑같은 펼침면(조작법 글자가 걷힌 빈 도감)
             _spread = NewGraphic<RawImage>("Spread"); _spread.texture = _spreadTex;
             // 메인메뉴 도감 펼침면과 같은 밝은 양피지 보정(바로 앞 화면과 색이 이어지게)
-            var _parch = Resources.Load<Shader>("HistoryCrash_UIParchment");
-            if (_parch) _spread.material = new Material(_parch) { name = "Transition_Parchment" };
+            _spread.material = MainMenuController.NewParchment("Transition_Parchment");
             Stretch(_spread.rectTransform);
             var _fit = _spread.gameObject.AddComponent<AspectRatioFitter>(); _fit.aspectMode = AspectRatioFitter.AspectMode.EnvelopeParent; _fit.aspectRatio = 16f / 9f;
         }
