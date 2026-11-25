@@ -80,6 +80,32 @@ namespace HistoryCrash.UI
                 "The color of a mummy's body and the orb above its head shows its element.\n\nYou can only defeat mummies of the same element as your orb.\n\nEach defeated mummy's soul flies to the Pharaoh and deals damage. Bring its HP to zero to purify the pyramid."),
         };
 
+        [Header("크레딧(메뉴 Credits: 아래에서 위로 올라감, Esc로 닫기, 클릭·Space를 누르고 있으면 빨리 넘김)")]
+        [SerializeField] private MainMenuCreditEntry[] _credits =
+        {
+            new MainMenuCreditEntry("팀장", "Team Lead", "Crowasang"),
+            new MainMenuCreditEntry("기획", "Game Design", "Crowasang", "Jeong Myoeng Chae", "GyoungTak Lee"),
+            new MainMenuCreditEntry("코어 시스템", "Core System", "Crowasang"),
+            new MainMenuCreditEntry("플레이어", "Player", "Crowasang"),
+            new MainMenuCreditEntry("카메라", "Camera", "Crowasang"),
+            new MainMenuCreditEntry("적", "Enemies", "Jeong Myoeng Chae", "GyoungTak Lee"),
+            new MainMenuCreditEntry("맵 구성", "Level Layout", "Crowasang"),
+            new MainMenuCreditEntry("보스 패턴", "Boss Patterns", "Jeong Myoeng Chae"),
+            new MainMenuCreditEntry("전투", "Combat", "Jeong Myoeng Chae"),
+            new MainMenuCreditEntry("스테이지 기믹", "Stage Gimmicks", "Jeong Myoeng Chae"),
+            new MainMenuCreditEntry("연출", "Cinematics", "Jeong Myoeng Chae"),
+            new MainMenuCreditEntry("UI", "UI", "Jeong Myoeng Chae", "GyoungTak Lee"),
+            new MainMenuCreditEntry("디자인", "Visual Design", "Jeong Myoeng Chae"),
+            new MainMenuCreditEntry("오브젝트 · 이펙트 에셋", "Object & Effect Assets", "Jeong Myoeng Chae", "GyoungTak Lee"),
+            new MainMenuCreditEntry("아웃라인 셰이더", "Outline Shader", "Crowasang"),
+            new MainMenuCreditEntry("사운드", "Sound", "Jeong Myoeng Chae", "GyoungTak Lee"),
+            new MainMenuCreditEntry("개발 도구", "Tools", "Unity", "Blender", "VARCO 3D", "VARCO SOUND"),
+            new MainMenuCreditEntry("도움 주신 분", "Special Thanks", "김동우 강사님", "김성수 강사님"),
+        };
+        [SerializeField, Tooltip("제목 아래 팀 이름")] private string _teamName = "Team History Maker";
+        [SerializeField, Tooltip("크레딧 맨 끝(감사 인사 앞)에 올라가는 줄들")] private string[] _creditEnding = { "NCAI 화이팅!" };
+        [SerializeField, Tooltip("크레딧이 올라가는 속도(기준 해상도 px/초)")] private float _creditSpeed = 80f;
+
         [Header("배치(기준 해상도 1920×1080, 왼쪽 위가 0,0)")]
         [SerializeField] private Vector2 _titlePos = new Vector2(90f, 120f);
         [SerializeField] private float _titleSize = 120f;
@@ -536,6 +562,15 @@ namespace HistoryCrash.UI
                 if ((_kb != null && (_kb.anyKey.wasPressedThisFrame)) || (_ms != null && _ms.leftButton.wasPressedThisFrame)) _skipRequested = true;
                 return;
             }
+            if (_creditsOpen)
+            {
+                // Esc = 닫기 / 클릭(누르고 있는 동안)·Space = 빨리 넘기기. 연 클릭이 그대로 빨리 넘기기가 되지 않게 잠깐 기다림
+                bool _ready = Time.unscaledTime - _creditsOpenedAt > CREDIT_INPUT_GUARD;
+                if (_ready && _kb != null && _kb.escapeKey.wasPressedThisFrame) { CloseCredits(); return; }
+                bool _fast = _ready && ((_ms != null && _ms.leftButton.isPressed) || (_kb != null && _kb.spaceKey.isPressed));
+                if (_creditRoll != null && _creditRoll.IsActive()) _creditRoll.timeScale = _fast ? CREDIT_FAST : 1f;
+                return;
+            }
             if (!_menuGroup.interactable || PauseSettingsUI.IsOpen || _kb == null) return;
             if (_kb.upArrowKey.wasPressedThisFrame || _kb.wKey.wasPressedThisFrame) Select((_sel + _items.Count - 1) % _items.Count);
             if (_kb.downArrowKey.wasPressedThisFrame || _kb.sKey.wasPressedThisFrame) Select((_sel + 1) % _items.Count);
@@ -748,6 +783,7 @@ namespace HistoryCrash.UI
                 case "Continue": StartCoroutine(StartGame()); break;
                 case "Start": StartCoroutine(StartGame()); break;   // 새 게임: 저장 초기화는 세이브 시스템이 생기면 여기서
                 case "Settings": if (_settings) _settings.Open(); break;
+                case "Credits": OpenCredits(); break;
                 case "Quit":
 #if UNITY_EDITOR
                     UnityEditor.EditorApplication.isPlaying = false;
@@ -756,6 +792,101 @@ namespace HistoryCrash.UI
 #endif
                     break;
             }
+        }
+
+        // ================= 크레딧 =================
+        // 메뉴·제목이 흐려지고 화면이 어두워진 뒤, 제작진 글이 아래에서 위로 일정한 속도로 올라감(DOTween). 끝나면 메뉴로 돌아옴
+        private const float CREDIT_INPUT_GUARD = 0.3f;   // 연 직후 이 시간(초) 동안은 닫는 입력을 받지 않음
+        private const float CREDIT_FADE = 0.4f;
+        private const float CREDIT_FAST = 5f;            // 클릭·Space를 누르고 있는 동안 올라가는 배속
+        private CanvasGroup _creditGroup;
+        private RectTransform _creditContent;
+        private float _creditHeight;
+        private bool _creditsOpen;
+        private float _creditsOpenedAt;
+        private Tween _creditRoll;
+
+        private void BuildCredits(RectTransform _root)
+        {
+            var _box = new GameObject("Credits", typeof(RectTransform), typeof(CanvasGroup)).GetComponent<RectTransform>();
+            _box.SetParent(_root, false); Stretch(_box);
+            _creditGroup = _box.GetComponent<CanvasGroup>();
+            _creditGroup.alpha = 0f; _creditGroup.interactable = _creditGroup.blocksRaycasts = false;
+            var _dim = MakeRect(_box, "Dim", Vector2.zero, Vector2.zero, new Color(0f, 0f, 0f, 0.72f), 0f, new Vector2(0.5f, 0.5f));
+            Stretch(_dim.rectTransform); _dim.raycastTarget = true;   // 크레딧 중에는 뒤의 메뉴가 눌리지 않게
+
+            // 글 묶음: 위쪽 가운데가 기준. 화면 아래 끝에서 시작해 위로 올라감
+            _creditContent = new GameObject("Roll", typeof(RectTransform)).GetComponent<RectTransform>();
+            _creditContent.SetParent(_box, false);
+            _creditContent.anchorMin = _creditContent.anchorMax = new Vector2(0.5f, 0f); _creditContent.pivot = new Vector2(0.5f, 1f);
+
+            float _y = 0f;
+            CreditLine("History Crash", ref _y, 96f, 1f, true, 6f);
+            if (!string.IsNullOrEmpty(_teamName)) CreditLine(_teamName, ref _y, 40f, 0.85f, false, 0f);
+            _y += 70f;
+            foreach (var _c in _credits)
+            {
+                if (_c == null) continue;
+                CreditLine(_c.Role, ref _y, 34f, 0.7f, false, 10f);
+                if (_c.Names != null) foreach (var _n in _c.Names) CreditLine(_n, ref _y, 46f, 1f, false, 4f);
+                _y += 46f;
+            }
+            _y += 60f;
+            if (_creditEnding != null) foreach (var _e in _creditEnding) if (!string.IsNullOrEmpty(_e)) CreditLine(_e, ref _y, 46f, 1f, false, 30f);
+            CreditLine(GameLanguage.T("플레이해 주셔서 감사합니다", "Thank you for playing"), ref _y, 40f, 0.85f, false, 0f);
+            _creditHeight = _y;
+            _creditContent.sizeDelta = new Vector2(1400f, _creditHeight);
+        }
+
+        /// <summary>크레딧 한 줄(가운데 정렬). _y는 위에서부터 쌓인 높이로, 이 줄 높이와 _gap만큼 늘어남</summary>
+        private void CreditLine(string _s, ref float _y, float _size, float _alpha, bool _gradient, float _gap)
+        {
+            // 한글이 있으면 한글 글꼴(설정창과 같은 글꼴, 같은 크기로 보이게 조금 작게)
+            bool _hangul = false;
+            foreach (char ch in _s) if (ch >= 0xAC00 && ch <= 0xD7A3) { _hangul = true; break; }
+            var _ko = _hangul ? PauseSettingsUI.KoreanFont() : null;
+            var _t = MakeText(_creditContent, _s, Vector2.zero, _ko ? _size * 0.82f : _size, _gradient, _ko);
+            var _r = _t.rectTransform;
+            _r.anchorMin = _r.anchorMax = new Vector2(0.5f, 1f); _r.pivot = new Vector2(0.5f, 1f);
+            _r.sizeDelta = new Vector2(1400f, _size * 1.4f);
+            _r.anchoredPosition = new Vector2(0f, -_y);
+            _t.alignment = TextAlignmentOptions.Center;
+            if (!_gradient) _t.color = new Color(FACE.r, FACE.g, FACE.b, _alpha);
+            _y += _size * 1.4f + _gap;
+        }
+
+        private void OpenCredits()
+        {
+            if (_creditsOpen || !_creditGroup) return;
+            _creditsOpen = true; _creditsOpenedAt = Time.unscaledTime;
+            _menuGroup.interactable = _menuGroup.blocksRaycasts = false;
+            _menuGroup.DOFade(0f, CREDIT_FADE).SetUpdate(true).SetLink(_menuGroup.gameObject);
+            _titleGroup.DOFade(0f, CREDIT_FADE).SetUpdate(true).SetLink(_titleGroup.gameObject);
+            _creditGroup.blocksRaycasts = true;
+            _creditGroup.DOKill();
+            _creditGroup.DOFade(1f, CREDIT_FADE).SetUpdate(true).SetLink(_creditGroup.gameObject);
+
+            // 글 묶음 위 끝이 화면 아래 끝 → 글 묶음 아래 끝이 화면 위 끝을 지날 때까지
+            float _screenH = ((RectTransform)_creditGroup.transform).rect.height;
+            float _dist = _screenH + _creditHeight;
+            _creditRoll?.Kill();
+            _creditContent.anchoredPosition = Vector2.zero;
+            _creditRoll = _creditContent.DOAnchorPosY(_dist, _dist / Mathf.Max(1f, _creditSpeed))
+                .SetEase(Ease.Linear).SetUpdate(true).SetLink(_creditContent.gameObject)
+                .OnComplete(CloseCredits);
+        }
+
+        private void CloseCredits()
+        {
+            if (!_creditsOpen) return;
+            _creditsOpen = false;
+            _creditRoll?.Kill(); _creditRoll = null;
+            _creditGroup.blocksRaycasts = false;
+            _creditGroup.DOKill();
+            _creditGroup.DOFade(0f, CREDIT_FADE).SetUpdate(true).SetLink(_creditGroup.gameObject);
+            _titleGroup.DOFade(1f, CREDIT_FADE).SetUpdate(true).SetLink(_titleGroup.gameObject);
+            _menuGroup.DOFade(1f, CREDIT_FADE).SetUpdate(true).SetLink(_menuGroup.gameObject)
+                .OnComplete(() => { if (!_creditsOpen) _menuGroup.interactable = _menuGroup.blocksRaycasts = true; });
         }
 
         // ================= 영상 =================
@@ -885,7 +1016,7 @@ namespace HistoryCrash.UI
             // 메뉴
             _items.Clear();
             if (_hasSave) _items.Add("Continue");
-            _items.Add("Start"); _items.Add("Settings"); _items.Add("Quit");
+            _items.Add("Start"); _items.Add("Settings"); _items.Add("Credits"); _items.Add("Quit");
             var _menu = new GameObject("Menu", typeof(RectTransform), typeof(CanvasGroup)).GetComponent<RectTransform>();
             _menu.SetParent(_root, false); Stretch(_menu);
             _menuGroup = _menu.GetComponent<CanvasGroup>();
@@ -908,6 +1039,8 @@ namespace HistoryCrash.UI
             _selMark = MakeRect(_menu, "Select", Vector2.zero, new Vector2(_menuSize * 0.3f, _menuSize * 0.3f), RUBY, 45f, new Vector2(0.5f, 0.5f)).rectTransform;
             Select(0);
 
+            BuildCredits(_root);
+
             // 인트로 뒤 책장 넘김·조작법 페이지(영상 위, 검은 막 아래)
             BuildBookPages(_root);
             BuildBookmark(_root);
@@ -918,7 +1051,7 @@ namespace HistoryCrash.UI
             _black = _b.GetComponent<Image>(); _black.color = Color.black; _black.raycastTarget = false;
         }
 
-        private TextMeshProUGUI MakeText(RectTransform _parent, string _s, Vector2 _pos, float _size, bool _gradient)
+        private TextMeshProUGUI MakeText(RectTransform _parent, string _s, Vector2 _pos, float _size, bool _gradient, TMP_FontAsset _fontOverride = null)
         {
             var _go = new GameObject(_s, typeof(RectTransform), typeof(TextMeshProUGUI));
             _go.transform.SetParent(_parent, false);
@@ -926,7 +1059,7 @@ namespace HistoryCrash.UI
             _r.anchorMin = _r.anchorMax = new Vector2(0f, 1f); _r.pivot = new Vector2(0f, 0.5f);
             _r.anchoredPosition = new Vector2(_pos.x, -_pos.y); _r.sizeDelta = new Vector2(_size * 6f, _size * 1.4f);
             var _t = _go.GetComponent<TextMeshProUGUI>();
-            if (_font) _t.font = _font;
+            if (_fontOverride) _t.font = _fontOverride; else if (_font) _t.font = _font;
             _t.text = _s; _t.fontSize = _size; _t.alignment = TextAlignmentOptions.MidlineLeft;
             _t.textWrappingMode = TextWrappingModes.NoWrap; _t.raycastTarget = false; _t.color = FACE;
             // 진갈색 테두리 + 아래로 떨어지는 그림자
