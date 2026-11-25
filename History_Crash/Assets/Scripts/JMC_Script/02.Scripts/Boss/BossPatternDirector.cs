@@ -477,6 +477,7 @@ namespace HistoryCrash.Boss
             _eBroken[_i] = true;
             EnsureFx();
             _fxE.Burst(new Vector3(_tip.x, Mathf.Max(_tip.y, _grid.FloorTopY + 0.2f), _tip.z), -_dir, 1f, 9);
+            HistoryCrash.Sound.GameSfx.Play("Weapon_E_Break", _tip, null, 0f, false, false, 0.04f);
             if (_debugLog) Debug.Log(string.Format("[BossPattern] E staff {0} broke at {1} castT={2:F2}", _i, _tip.ToString("F2"), _castTime));
         }
 
@@ -830,6 +831,7 @@ namespace HistoryCrash.Boss
                     Vector3 _p = _flightA.Start + _flightA.Dir * _flightA.Total;
                     if (_flightA.Straight) _fxA.Burst(new Vector3(_p.x, _grid.FloorTopY + 0.03f, _p.z), Vector3.up, 1f, 12);
                     else _fxA.Burst(_p, -_flightA.Dir, 0.8f, 8);
+                    HistoryCrash.Sound.GameSfx.Play("Weapon_A_Break", _p);
                     DropStaff(0, _p);   // A: 코페쉬가 깨진 지점
                 }
             }

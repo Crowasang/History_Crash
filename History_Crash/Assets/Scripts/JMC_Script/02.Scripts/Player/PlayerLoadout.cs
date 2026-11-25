@@ -90,6 +90,7 @@ namespace HistoryCrash.Player
             if (_it.Kind == PickupKind.Staff) { HeldStaff = _it.Value; Debug.Log("[Loadout] Staff " + _staffNames[HeldStaff]); }
             else { HasOrb = true; HeldOrb = _it.ElementValue; SetSocketOrb(HeldOrb); Debug.Log("[Loadout] Orb " + ElementInfo.Name(HeldOrb)); }
             ElementFx.Burst(_it.Kind == PickupKind.Orb ? _it.ElementValue : Element.Electric, _it.transform.position + Vector3.up * 0.4f, 0.5f, 10);
+            HistoryCrash.Sound.GameSfx.Play(_it.Kind == PickupKind.Staff ? "Pickup_Weapon" : "Pickup_Orb");
             _it.Collect();
             if (_animator && !string.IsNullOrEmpty(_pickupState)) _animator.CrossFadeInFixedTime(_pickupState, 0.1f);
             return true;

@@ -34,6 +34,7 @@ namespace HistoryCrash.Enemy
             _ball.transform.localScale = Vector3.one * ORB_SIZE;
             _ball.transform.localPosition = new Vector3(0, 0.28f, 0);
             ElementFx.Burst(_e, _ball.transform.position, 0.6f, 12);
+            HistoryCrash.Sound.GameSfx.Play("Orb_Appear", _ball.transform.position);
             _root.AddComponent<OrbMotion>().Lifetime = _lifetime;
             return _root;
         }
