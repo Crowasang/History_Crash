@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using HistoryCrash.Boss;
 using HistoryCrash.CameraRig;
 using HistoryCrash.UI;
+using TMPro;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.Rendering;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
@@ -34,6 +36,7 @@ namespace HistoryCrash.Cutscene
         private const float FPS = 24f, TOTAL = 408f, LB = 70f;
         private static readonly Rect CARD_RECT = new Rect(1060f, 120f, 540f, 326f);   // 1920x1080 기준, 왼쪽 위 원점
         private static readonly Color GREEN = new Color(0.35f, 1f, 0.4f);
+        private const float SKIP_GUARD = 0.3f;   // 시작 직후 남아 있던 키 입력으로 바로 넘어가지 않게(초)
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void Hook() { SkipNext = false; SceneManager.sceneLoaded -= OnLoaded; SceneManager.sceneLoaded += OnLoaded; }
@@ -88,6 +91,14 @@ namespace HistoryCrash.Cutscene
             float _f = 0f;
             while (_f < TOTAL)
             {
+                // Esc로 건너뛰기: 남은 연출 없이 바로 게임으로(소리도 끊음).
+                // 설정창의 Esc 확인(Update)이 이 코루틴보다 먼저 돌기 때문에, 같은 입력으로 설정창이 열리지 않음
+                var _kb = Keyboard.current;
+                if (_kb != null && _kb.escapeKey.wasPressedThisFrame && Time.unscaledTime - _t0 > SKIP_GUARD)
+                {
+                    if (_audio) _audio.Stop();
+                    break;
+                }
                 _f = (Time.unscaledTime - _t0) * FPS;
                 if (_audio && _audio.isPlaying) _f = Mathf.Max(_f, _audio.time * FPS);   // 소리와 어긋나지 않게
                 try { Apply(Mathf.Min(_f, TOTAL - 1f)); }
@@ -204,6 +215,7 @@ namespace HistoryCrash.Cutscene
             _flash.color = new Color(GREEN.r, GREEN.g, GREEN.b, f >= 150f ? 0.18f * Mathf.Exp(-(f - 150f) / 6f) : 0f);
             float _k = f < 360f ? E(S(f, 0, 24)) : 1f - E(S(f, 360, 384));
             _top.sizeDelta = new Vector2(0f, LB * _k); _bot.sizeDelta = new Vector2(0f, LB * _k);
+            if (_skipHint) _skipHint.alpha = 0.75f * _k;   // 아래 띠와 함께 나타나고 사라짐
             int[] _cs = { 228, 238, 254 };
             for (int i = 0; i < 3; i++) _cards[i].color = new Color(1f, 1f, 1f, E(S(f, _cs[i], _cs[i] + 14)) * (1f - E(S(f, 292, 310))));
             foreach (var _h in _hud) if (_h.g) _h.g.alpha = _h.a * (_h.boss ? E(S(f, 364, 384)) : E(S(f, 384, 407)));
@@ -234,6 +246,7 @@ namespace HistoryCrash.Cutscene
 
         // ---------------- 만들기 ----------------
         private GameObject _canvasGo;
+        private CanvasGroup _skipHint;
         private void BuildUI()
         {
             _canvasGo = new GameObject("BossIntro_UI", typeof(RectTransform));
@@ -244,6 +257,19 @@ namespace HistoryCrash.Cutscene
 
             _flash = NewGraphic<Image>("Flash", _root); Stretch(_flash.rectTransform); _flash.color = Color.clear;
             _top = Bar("Top", _root, 1f); _bot = Bar("Bottom", _root, 0f);
+
+            // 아래 검은 띠 오른쪽: 건너뛰기 안내
+            var _hint = new GameObject("SkipHint", typeof(RectTransform)).AddComponent<TextMeshProUGUI>();
+            var _hr = _hint.rectTransform; _hr.SetParent(_bot, false);
+            _hr.anchorMin = _hr.anchorMax = new Vector2(1f, 0.5f); _hr.pivot = new Vector2(1f, 0.5f);
+            _hr.anchoredPosition = new Vector2(-48f, 0f); _hr.sizeDelta = new Vector2(400f, 40f);
+            _hint.text = GameLanguage.T("건너뛰기 (Esc)", "Skip (Esc)");
+            var _ko = GameLanguage.IsKorean ? PauseSettingsUI.KoreanFont() : null;
+            var _font = _ko ? _ko : Resources.Load<TMP_FontAsset>("UI/Settings/Font/EBGaramond_BoldItalic_SDF");
+            if (_font) _hint.font = _font;
+            _hint.fontSize = _ko ? 22f : 26f; _hint.alignment = TextAlignmentOptions.MidlineRight;
+            _hint.color = new Color(0.9f, 0.86f, 0.75f); _hint.raycastTarget = false; _hint.textWrappingMode = TextWrappingModes.NoWrap;
+            _skipHint = _hint.gameObject.AddComponent<CanvasGroup>(); _skipHint.alpha = 0f;
 
             string[] _n = { "Card_Epithet", "Card_Name", "Card_Sub" };
             _cards = new RawImage[3];
