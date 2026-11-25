@@ -14,7 +14,7 @@ namespace HistoryCrash.Enemy
 {
     /// <summary>
     /// 보스 패턴과 패턴 사이에 머미를 소환한다.
-    /// - 성별(여/남)과 속성(불·물·전기·풀)은 무작위.
+    /// - 성별(여/남)과 속성(불·물·전기)은 무작위.
     /// - 파라오 제단 계단 아래 칸(파라오에서 가장 가까운 걷기 가능 칸 주변)에서 속성 불꽃이 피어오른 뒤 바닥에서 솟아오른다.
     /// </summary>
     public class MummySpawner : MonoBehaviour
