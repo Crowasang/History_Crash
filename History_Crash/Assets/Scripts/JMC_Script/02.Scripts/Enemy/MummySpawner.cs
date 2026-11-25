@@ -31,6 +31,7 @@ namespace HistoryCrash.Enemy
         [SerializeField, FormerlySerializedAs("perGap"), Tooltip("패턴 사이마다 소환할 수")] private int _perGap = 1;
         [SerializeField, FormerlySerializedAs("spawnSpread"), Tooltip("소환 칸 후보: 계단 아래 기준 칸에서 이 칸수 안")] private int _spawnSpread = 1;
         [SerializeField, FormerlySerializedAs("spawnCells"), Tooltip("직접 지정한 소환 칸(비우면 자동)")] private List<Vector2Int> _spawnCells = new List<Vector2Int>();
+        [SerializeField, Tooltip("소환 기준점(계단 앞 빈 오브젝트). 비우면 파라오 위치 기준. 이 점에서 가장 가까운 바닥 칸 주변 Spawn Spread 칸 안에서 나옴")] private Transform _spawnCenter;
         [SerializeField, FormerlySerializedAs("flameTime")] private float _flameTime = 0.9f;
         [SerializeField, FormerlySerializedAs("riseTime")] private float _riseTime = 0.6f;
         [SerializeField, FormerlySerializedAs("footOffset"), Tooltip("모델 원점에서 발바닥까지(바닥 위로 올리는 양, m)")] private float _footOffset = 0.07f;
@@ -52,7 +53,8 @@ namespace HistoryCrash.Enemy
         {
             if (_spawnCells.Count > 0 || _grid == null || !_pharaoh) return;
             // 파라오 칸에서 가장 가까운 걷기 가능 칸 = 제단 계단 아래
-            var _baseCell = _grid.NearestSolid(_grid.WorldToCell(_pharaoh.position));
+            var _center = _spawnCenter ? _spawnCenter.position : _pharaoh.position;
+            var _baseCell = _grid.NearestSolid(_grid.WorldToCell(_center));
             for (int _dy = -_spawnSpread; _dy <= _spawnSpread; _dy++)
                 for (int _dx = -_spawnSpread; _dx <= _spawnSpread; _dx++)
                 {
