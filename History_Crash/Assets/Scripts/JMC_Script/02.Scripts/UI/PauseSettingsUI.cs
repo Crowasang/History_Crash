@@ -48,7 +48,7 @@ namespace HistoryCrash.UI
 
         // ---- 설정 값(PlayerPrefs) ----
         private const string K_SENS = "HC_MouseSens", K_INV = "HC_InvertY", K_MASTER = "HC_Master", K_MUSIC = "HC_Music", K_SFX = "HC_Effects", K_FULL = "HC_Fullscreen", K_BRIGHT = "HC_Brightness";
-        private const float D_SENS = 5f, D_MASTER = 100f, D_MUSIC = 70f, D_SFX = 100f, D_BRIGHT = 50f;
+        private const float D_SENS = 5f, D_MASTER = 100f, D_MUSIC = 50f, D_SFX = 50f, D_BRIGHT = 50f;
         private const float SENS_TO_CAMERA = 0.024f;         // 슬라이더 5 = 카메라 0.12(기본값)
 
         private Canvas _canvas; private CanvasGroup _group;

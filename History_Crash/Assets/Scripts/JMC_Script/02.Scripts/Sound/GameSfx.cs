@@ -144,7 +144,7 @@ namespace HistoryCrash.Sound
         {
             var _sm = SoundManager.Instance;
             if (_sm) return _sm.MasterVolume * _sm.SfxVolume;
-            return PlayerPrefs.GetFloat("HC_Master", 100f) / 100f * PlayerPrefs.GetFloat("HC_Effects", 100f) / 100f;
+            return PlayerPrefs.GetFloat("HC_Master", 100f) / 100f * PlayerPrefs.GetFloat("HC_Effects", 50f) / 100f;
         }
 
         private void Update()

@@ -348,7 +348,7 @@ namespace HistoryCrash.Cutscene
         {
             var _sm = SoundManager.Instance;
             if (_sm) return _sm.MasterVolume * _sm.BgmVolume;
-            return PlayerPrefs.GetFloat("HC_Master", 100f) / 100f * PlayerPrefs.GetFloat("HC_Music", 70f) / 100f;
+            return PlayerPrefs.GetFloat("HC_Master", 100f) / 100f * PlayerPrefs.GetFloat("HC_Music", 50f) / 100f;
         }
         private static float E(float t) { t = Mathf.Clamp01(t); return t * t * (3f - 2f * t); }
         private static float S(float f, float a, float b) { return Mathf.Clamp01((f - a) / (b - a)); }
