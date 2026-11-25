@@ -13,7 +13,7 @@ namespace HistoryCrash.Boss
         private static readonly int LINE = Shader.PropertyToID("_Line"), CRACK = Shader.PropertyToID("_Crack"), SIZE = Shader.PropertyToID("_Size"),
             HALF = Shader.PropertyToID("_Half"), R = Shader.PropertyToID("_R"), LANE = Shader.PropertyToID("_Lane"), P = Shader.PropertyToID("_P"),
             T = Shader.PropertyToID("_T"), FLASH = Shader.PropertyToID("_Flash"), FADE = Shader.PropertyToID("_Fade"), DIM = Shader.PropertyToID("_Dim"), SEED = Shader.PropertyToID("_Seed"), TAPER = Shader.PropertyToID("_Taper"), NEAR_FADE = Shader.PropertyToID("_NearFade");
-        private const int DRAPE_ROWS = 46, DRAPE_COLS = 15;   // 높이를 따라가는 판: 시작 쪽 0.2m 간격 + 끝 한 줄
+        private const int DRAPE_ROWS = 46, DRAPE_COLS = 2;   // 높이를 따라가는 판: 시작 쪽 0.2m 간격 + 끝 한 줄
         private const float DRAPE_STEP = 0.2f;
         private static Mesh _quad;
 
@@ -107,13 +107,12 @@ namespace HistoryCrash.Boss
             for (int _r = 0; _r < DRAPE_ROWS; _r++)
             {
                 float _u = _r == DRAPE_ROWS - 1 ? 1f : Mathf.Min(1f, _r * DRAPE_STEP / _sizeX);
+                float _y = _heightAt(_go.transform.TransformPoint(new Vector3(_u - 0.5f, 0f, 0f))) - _floorY;   // 한 줄은 같은 높이(옆으로 굽지 않게)
                 for (int _c = 0; _c < DRAPE_COLS; _c++)
                 {
                     float _v = _c / (DRAPE_COLS - 1f);
                     int _i = _r * DRAPE_COLS + _c;
-                    Vector3 _p = new Vector3(_u - 0.5f, 0f, _v - 0.5f);
-                    _p.y = _heightAt(_go.transform.TransformPoint(_p)) - _floorY;
-                    _drapeV[_i] = _p; _drapeUv[_i] = new Vector2(_u, _v);
+                    _drapeV[_i] = new Vector3(_u - 0.5f, _y, _v - 0.5f); _drapeUv[_i] = new Vector2(_u, _v);
                 }
             }
             _drape.vertices = _drapeV; _drape.uv = _drapeUv;

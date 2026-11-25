@@ -42,6 +42,9 @@ namespace HistoryCrash.Sound
             // 기믹
             { "Horus_Warning", (0.70f, Space.Flat) }, { "Horus_Collapse", (0.80f, Space.Flat) }, { "Horus_Restore", (0.70f, Space.Flat) },
             { "Anubis_Warning", (0.50f, Space.Half) }, { "Anubis_Pull", (0.40f, Space.Flat) }, { "Anubis_Land", (0.48f, Space.Flat) },
+            // 제드 기둥(수복은 6개가 함께라 2D)
+            { "Zedtop_Warning", (0.46f, Space.Half) }, { "Zedtop_Collapse", (0.40f, Space.Half) }, { "Zedtop_Evaporate", (0.31f, Space.Half) },
+            { "Zedtop_Restore", (0.46f, Space.Flat) }, { "Zedtop_TierLand", (0.57f, Space.Flat) }, { "Zedtop_RestoreDone", (0.35f, Space.Flat) },
         };
         private const float STRIDE = 1.8f;        // 발걸음 간격(m): 걷기 4m/s → 0.45초, 달리기 6.4m/s → 0.28초
         private const int MAX_VOICES = 40;
