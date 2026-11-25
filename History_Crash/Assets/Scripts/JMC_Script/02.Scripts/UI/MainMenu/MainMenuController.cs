@@ -63,6 +63,9 @@ namespace HistoryCrash.UI
         [SerializeField, Tooltip("영상이 바뀔 때 겹쳐 넘어가는 시간(초)")] private float _crossFade = 0.35f;
         [SerializeField, Tooltip("테스트용: 메뉴·줌인을 건너뛰고 인트로 마지막 장면(책장 넘김 표시)부터 시작")] private bool _testFromIntroEnd;
 
+        [Header("시작 로고 영상(게임을 켠 뒤 메뉴 전에 한 번, Esc·클릭·Enter·Space로 건너뛰기)")]
+        [SerializeField, Tooltip("Assets/Art/Logo(git에 올리지 않음). 비어 있으면 로고 없이 바로 메뉴")] private VideoClip _logoClip;
+
         [Header("튜토리얼(조작법 다음 장부터 한 장씩: 왼쪽 그림, 오른쪽 설명)")]
         [SerializeField] private MainMenuTutorialPage[] _tutorialPages =
         {
@@ -187,6 +190,7 @@ namespace HistoryCrash.UI
         {
             _menuGroup.alpha = 0f; _menuGroup.interactable = false;
             if (_testFromIntroEnd) { SetAlpha(_black, 0f); _titleGroup.alpha = 0f; StartCoroutine(StartGame()); yield break; }
+            yield return PlayLogo();
             if (_playPinAnim)
             {
                 // 핀이 처음 꽂히는 연출 → 핀 꽂힌 반복 배경
@@ -1049,6 +1053,69 @@ namespace HistoryCrash.UI
             var _b = new GameObject("Black", typeof(RectTransform), typeof(Image));
             _b.transform.SetParent(_root, false); Stretch((RectTransform)_b.transform);
             _black = _b.GetComponent<Image>(); _black.color = Color.black; _black.raycastTarget = false;
+            _uiRoot = _root;
+        }
+
+        // ================= 시작 로고 영상 =================
+        // 검은 막 위에 로고 영상을 한 번 재생 → 끝나거나 건너뛰면 서서히 사라지고 원래 흐름(검은 막 → 메뉴)으로.
+        // 게임을 켠 뒤 처음 메인메뉴에 올 때만(게임에서 메인메뉴로 돌아올 때는 다시 나오지 않음)
+        private const float LOGO_SKIP_GUARD = 0.2f;   // 시작 직후 이 시간(초)은 건너뛰기 입력을 받지 않음
+        private const float LOGO_FADE = 0.4f;
+        private static bool _logoShown;
+        private RectTransform _uiRoot;
+
+        private IEnumerator PlayLogo()
+        {
+            if (!_logoClip || _logoShown) yield break;
+            _logoShown = true;
+
+            var _rtLogo = new RenderTexture((int)_logoClip.width, (int)_logoClip.height, 0) { name = "MainMenuLogo" };
+            var _go = new GameObject("LogoVideo", typeof(RectTransform), typeof(RawImage), typeof(AspectRatioFitter));
+            _go.transform.SetParent(_uiRoot, false); _go.transform.SetAsLastSibling();   // 검은 막보다 위
+            Stretch((RectTransform)_go.transform);
+            var _img = _go.GetComponent<RawImage>(); _img.texture = _rtLogo; _img.raycastTarget = false; SetAlpha(_img, 0f);
+            var _fit = _go.GetComponent<AspectRatioFitter>(); _fit.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
+            _fit.aspectRatio = (float)_logoClip.width / Mathf.Max(1f, _logoClip.height);
+
+            var _p = _go.AddComponent<VideoPlayer>();
+            _p.playOnAwake = false; _p.isLooping = false; _p.clip = _logoClip;
+            _p.renderMode = VideoRenderMode.RenderTexture; _p.targetTexture = _rtLogo;
+            _p.timeUpdateMode = VideoTimeUpdateMode.UnscaledGameTime; _p.waitForFirstFrame = true;
+            // 소리는 AudioSource로 내보냄(Direct는 에디터에서 소리가 안 나는 경우가 있음). 코드로 만든 VideoPlayer는 트랙 수가 0이라 Prepare 전에 켜 줘야 함
+            var _src = _go.AddComponent<AudioSource>(); _src.playOnAwake = false; _src.spatialBlend = 0f; _src.volume = MusicVolume();
+            _p.audioOutputMode = VideoAudioOutputMode.AudioSource;
+            _p.controlledAudioTrackCount = 1;
+            _p.EnableAudioTrack(0, true); _p.SetTargetAudioSource(0, _src);
+            bool _ended = false; _p.loopPointReached += _ => _ended = true;
+            _p.Prepare();
+            for (float _t = 0f; !_p.isPrepared && _t < 5f; _t += Time.unscaledDeltaTime) yield return null;   // 준비가 안 되면 5초 뒤 포기
+            if (_p.isPrepared)
+            {
+                _src.volume = MusicVolume();
+                _p.Play();
+                while (_p.frame < 1 && !_ended) yield return null;   // 첫 장면이 그려진 뒤 보여 줌
+                SetAlpha(_img, 1f);
+                float _start = Time.unscaledTime;
+                while (!_ended)
+                {
+                    var _kb = Keyboard.current; var _ms = Mouse.current;
+                    bool _skip = Time.unscaledTime - _start > LOGO_SKIP_GUARD
+                                 && ((_kb != null && (_kb.escapeKey.wasPressedThisFrame || _kb.enterKey.wasPressedThisFrame || _kb.spaceKey.wasPressedThisFrame))
+                                     || (_ms != null && _ms.leftButton.wasPressedThisFrame));
+                    if (_skip) break;
+                    _src.volume = MusicVolume();   // 재생 중 볼륨 변경 반영
+                    yield return null;
+                }
+                // 화면과 소리가 함께 잦아듦
+                yield return DOVirtual.Float(1f, 0f, LOGO_FADE, _k =>
+                {
+                    SetAlpha(_img, _k);
+                    _src.volume = MusicVolume() * _k;
+                }).SetEase(Ease.InOutSine).SetUpdate(true).SetLink(_go).WaitForCompletion();
+            }
+            _p.Stop();
+            Destroy(_go);
+            _rtLogo.Release(); Destroy(_rtLogo);
         }
 
         private TextMeshProUGUI MakeText(RectTransform _parent, string _s, Vector2 _pos, float _size, bool _gradient, TMP_FontAsset _fontOverride = null)
