@@ -687,7 +687,7 @@ namespace HistoryCrash.UI
             // 씬에 팀의 SoundManager가 있으면 그 음량(설정창이 바꾸는 값)을 그대로, 없으면 설정창 저장값
             var _sm = SoundManager.Instance;
             if (_sm) return _sm.MasterVolume * _sm.BgmVolume;
-            return PlayerPrefs.GetFloat("HC_Master", 100f) / 100f * PlayerPrefs.GetFloat("HC_Music", 70f) / 100f;
+            return PlayerPrefs.GetFloat("HC_Master", 100f) / 100f * PlayerPrefs.GetFloat("HC_Music", 50f) / 100f;
         }
 
         private AudioClip AudioFor(VideoClip _v)
