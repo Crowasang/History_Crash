@@ -543,50 +543,42 @@ namespace HistoryCrash.Boss
             for (int _i = 0; _i < 5; _i++) _warns[_n + 1 + _i] = new RangeTelegraph("RangeTelegraph_E" + (_i + 1), transform, _rangeLineColor, _rangeCrackColor, 0.55f);
         }
 
-        // 파라오가 선 제단 둘레의 높이(A 예고가 제단·계단 위를 덮게). 한 번만 잰다
-        private const float ALTAR_STEP = 0.2f;
-        private const int ALTAR_HALF = 45;   // 파라오 둘레 ±9m
-        private float[,] _altar;
+        // 파라오 발밑에서 제단 아래까지의 높이(A 예고가 제단·계단 위를 덮게). 계단 턱을 따라 꺾이거나 무늬가 늘어나지 않게
+        // "평평한 윗면 + 곧은 비탈 하나"로 만들어 어느 방향이든 같은 모양을 쓴다. 한 번만 잰다
+        private const float ALTAR_STEP = 0.2f, ALTAR_SLOPE = 0.55f;
+        private const int ALTAR_SAMPLES = 26;              // 5m까지만 잰다(그 밖에는 기둥이 있음)
+        private readonly float[] _altar = new float[40];   // 파라오에서의 거리(칸 0.2m)별 높이
+        private float _altarFoot;                          // 비탈이 끝나고 바닥이 시작되는 거리(m)
 
         private void SampleAltar()
         {
-            int _n = ALTAR_HALF * 2 + 1;
-            var _raw = new float[_n, _n];
             var _hits = new RaycastHit[16];
             float _top = _pharaoh.position.y + 0.3f, _floor = _grid.FloorTopY;
-            for (int _z = 0; _z < _n; _z++)
-                for (int _x = 0; _x < _n; _x++)
+            Vector3 _front = new Vector3(_grid.Origin.x + (_grid.Cols - 1) * 0.5f * _grid.TileSize - _pharaoh.position.x, 0f, _grid.Origin.y + (_grid.Rows - 1) * 0.5f * _grid.TileSize - _pharaoh.position.z).normalized;
+            for (int _i = 0; _i < _altar.Length; _i++) _altar[_i] = _floor;
+            for (int _i = 0; _i < ALTAR_SAMPLES; _i++)
+                for (int _a = -15; _a <= 15; _a += 5)
                 {
-                    float _h = _floor;
-                    var _from = new Vector3(_pharaoh.position.x + (_x - ALTAR_HALF) * ALTAR_STEP, _top, _pharaoh.position.z + (_z - ALTAR_HALF) * ALTAR_STEP);
+                    var _from = _pharaoh.position + Quaternion.Euler(0f, _a, 0f) * _front * (_i * ALTAR_STEP);
+                    _from.y = _top;
                     int _c = Physics.RaycastNonAlloc(_from, Vector3.down, _hits, _top - _floor, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
-                    for (int _i = 0; _i < _c; _i++)
+                    for (int _k = 0; _k < _c; _k++)
                     {
-                        var _col = _hits[_i].collider;   // 움직이는 것(Player·미라 등)은 빼고 지형만
+                        var _col = _hits[_k].collider;   // 움직이는 것(Player·미라 등)은 빼고 지형만
                         if (_col.attachedRigidbody || _col is CharacterController || _col.transform.IsChildOf(_pharaoh)) continue;
-                        _h = Mathf.Max(_h, _hits[_i].point.y);
+                        _altar[_i] = Mathf.Max(_altar[_i], _hits[_k].point.y);
                     }
-                    _raw[_x, _z] = _h;
                 }
-            // 계단 모서리에 묻히지 않게 이웃 중 가장 높은 값으로
-            _altar = new float[_n, _n];
-            for (int _z = 0; _z < _n; _z++)
-                for (int _x = 0; _x < _n; _x++)
-                {
-                    float _h = _floor;
-                    for (int _dz = Mathf.Max(0, _z - 1); _dz <= Mathf.Min(_n - 1, _z + 1); _dz++)
-                        for (int _dx = Mathf.Max(0, _x - 1); _dx <= Mathf.Min(_n - 1, _x + 1); _dx++) _h = Mathf.Max(_h, _raw[_dx, _dz]);
-                    _altar[_x, _z] = _h;
-                }
+            for (int _i = _altar.Length - 2; _i >= 0; _i--) _altar[_i] = Mathf.Max(_altar[_i], _altar[_i + 1]);                                    // 움푹한 곳 없이
+            for (int _i = 1; _i < _altar.Length; _i++) _altar[_i] = Mathf.Max(_altar[_i], _altar[_i - 1] - ALTAR_SLOPE * ALTAR_STEP);   // 비탈보다 가파르게 떨어지지 않게
+            _altarFoot = System.Array.FindIndex(_altar, _h => _h <= _floor + 0.001f) * ALTAR_STEP;
         }
 
         private float AltarHeight(Vector3 _p)
         {
-            float _x = (_p.x - _pharaoh.position.x) / ALTAR_STEP + ALTAR_HALF, _z = (_p.z - _pharaoh.position.z) / ALTAR_STEP + ALTAR_HALF;
-            int _ix = Mathf.FloorToInt(_x), _iz = Mathf.FloorToInt(_z);
-            if (_ix < 0 || _iz < 0 || _ix >= ALTAR_HALF * 2 || _iz >= ALTAR_HALF * 2) return _grid.FloorTopY;
-            float _a = Mathf.Lerp(_altar[_ix, _iz], _altar[_ix + 1, _iz], _x - _ix), _b = Mathf.Lerp(_altar[_ix, _iz + 1], _altar[_ix + 1, _iz + 1], _x - _ix);
-            return Mathf.Lerp(_a, _b, _z - _iz);
+            float _d = new Vector2(_p.x - _pharaoh.position.x, _p.z - _pharaoh.position.z).magnitude / ALTAR_STEP;
+            int _i = (int)_d;
+            return _i >= _altar.Length - 1 ? _grid.FloorTopY : Mathf.Lerp(_altar[_i], _altar[_i + 1], _d - _i);
         }
 
         /// <summary>바닥 예고를 모두 바로 끈다(클리어 연출 시작 등).</summary>
@@ -710,7 +702,7 @@ namespace HistoryCrash.Boss
             Vector3 _start = Ground(_pharaoh.position);
             _start += (_end - _start).normalized * 0.4f;
             // 발밑은 좁게(제단 위는 코페쉬가 높이 떠 있어 맞지 않음), 바닥에 닿을 즈음 실제 폭으로
-            _warns[_w].PlaceLane(_start, _end, _radius * 2f, 0.6f, 1.2f, Mathf.Min(6.5f, (_end - _start).magnitude * 0.6f));
+            _warns[_w].PlaceLane(_start, _end, _radius * 2f, 0.6f, 1.2f, Mathf.Min(_altarFoot - 0.4f, (_end - _start).magnitude * 0.6f));
             _warns[_w].Set(_flightA.Active ? 0.7f + 0.3f * _flightA.Traveled / _flightA.HitDist : 0.7f * Mathf.InverseLerp(_aWarnStart, _aLaunchTime, _castTime));
         }
 
