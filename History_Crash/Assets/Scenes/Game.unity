@@ -31818,7 +31818,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ResultView
   _gameFlowSource: {fileID: 650339049}
   _clearPanel: {fileID: 975868237}
-  _failPanel: {fileID: 318218431}
+  _failPanel: {fileID: 0}
   _clearTimeText: {fileID: 1025978704}
   _failTimeText: {fileID: 690864507}
   _timeFormat: TIME {0:00}:{1:00}
