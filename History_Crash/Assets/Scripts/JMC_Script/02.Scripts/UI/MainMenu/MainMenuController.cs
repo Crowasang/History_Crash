@@ -890,6 +890,10 @@ namespace HistoryCrash.UI
         // 영상 준비·첫 장면을 기다리는 최대 시간(초). 넘으면 기다리지 않고 진행 → 영상 문제로 메뉴가 영영 안 나오는 일 방지
         private const float CLIP_WAIT_LIMIT = 4f;
 
+        // 기다린 시간에 더할 한 프레임 시간. 게임을 막 시작할 때처럼 로딩으로 한 프레임이 몇 초씩 걸려도
+        // 그 한 프레임이 대기 시간을 다 써 버리지 않게 최대 0.1초만 셈(그래서 로고가 준비 중에 포기되던 문제)
+        private static float WaitStep() => Mathf.Min(Time.unscaledDeltaTime, 0.1f);
+
         private async UniTask PlayClipAsync(VideoClip _clip, bool _loop, float _fade, CancellationToken _token)
         {
             if (!_clip) return;
@@ -897,11 +901,11 @@ namespace HistoryCrash.UI
             var _p = _vp[_back];
             _p.Stop(); _p.clip = _clip; _p.isLooping = _loop;
             _p.Prepare();
-            for (float _t = 0f; !_p.isPrepared && _t < CLIP_WAIT_LIMIT; _t += Time.unscaledDeltaTime) await NextFrame(_token);
+            for (float _t = 0f; !_p.isPrepared && _t < CLIP_WAIT_LIMIT; _t += WaitStep()) await NextFrame(_token);
             if (!_p.isPrepared) Debug.LogWarning("[MainMenu] 영상 준비가 늦어 기다리지 않고 진행: " + _clip.name);
             _p.Play();
             // 첫 장면이 실제로 그려진 뒤 보여 줌(검은 깜빡임 방지). 재생이 멈춰 있으면 다시 걸고, 그래도 안 나오면 넘어감
-            for (float _t = 0f; _p.frame < 1 && _t < CLIP_WAIT_LIMIT; _t += Time.unscaledDeltaTime)
+            for (float _t = 0f; _p.frame < 1 && _t < CLIP_WAIT_LIMIT; _t += WaitStep())
             {
                 if (_p.isPrepared && !_p.isPlaying) _p.Play();
                 await NextFrame(_token);
@@ -941,7 +945,7 @@ namespace HistoryCrash.UI
                 float _stalled = 0f;
                 while (!_done && (_p.isPlaying || _p.frame < 2) && _stalled < CLIP_WAIT_LIMIT)
                 {
-                    _stalled = _p.isPlaying ? 0f : _stalled + Time.unscaledDeltaTime;
+                    _stalled = _p.isPlaying ? 0f : _stalled + WaitStep();
                     await NextFrame(_token);
                 }
                 if (_stalled >= CLIP_WAIT_LIMIT) Debug.LogWarning("[MainMenu] 영상이 재생되지 않아 기다리지 않고 진행: " + (_p.clip ? _p.clip.name : "-"));
@@ -1059,16 +1063,17 @@ namespace HistoryCrash.UI
             _p.EnableAudioTrack(0, true); _p.SetTargetAudioSource(0, _src);
             bool _ended = false; _p.loopPointReached += _ => _ended = true;
             _p.Prepare();
-            for (float _t = 0f; !_p.isPrepared && _t < 5f; _t += Time.unscaledDeltaTime) await NextFrame(_token);   // 준비가 안 되면 5초 뒤 포기
+            for (float _t = 0f; !_p.isPrepared && _t < CLIP_WAIT_LIMIT; _t += WaitStep()) await NextFrame(_token);   // 준비가 안 되면 포기
             if (_p.isPrepared)
             {
                 _src.volume = MusicVolume();
                 _p.Play();
-                while (_p.frame < 1 && !_ended) await NextFrame(_token);   // 첫 장면이 그려진 뒤 보여 줌
+                for (float _t = 0f; _p.frame < 1 && !_ended && _t < CLIP_WAIT_LIMIT; _t += WaitStep()) await NextFrame(_token);   // 첫 장면이 그려진 뒤 보여 줌
                 SetAlpha(_img, 1f);
-                float _start = Time.unscaledTime;
-                while (!_ended)
+                float _start = Time.unscaledTime, _stalled = 0f;
+                while (!_ended && _stalled < CLIP_WAIT_LIMIT)   // 재생이 멈춘 채 오래 있으면 끝난 것으로 봄
                 {
+                    _stalled = _p.isPlaying ? 0f : _stalled + WaitStep();
                     var _kb = Keyboard.current; var _ms = Mouse.current;
                     bool _skip = Time.unscaledTime - _start > LOGO_SKIP_GUARD
                                  && ((_kb != null && (_kb.escapeKey.wasPressedThisFrame || _kb.enterKey.wasPressedThisFrame || _kb.spaceKey.wasPressedThisFrame))
