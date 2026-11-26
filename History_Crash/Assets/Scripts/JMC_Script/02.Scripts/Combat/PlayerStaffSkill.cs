@@ -15,10 +15,10 @@ namespace HistoryCrash.Combat
     /// 주운 스태프의 보스 패턴을 Player가 약화된 버전으로 쓰는 공격. 모양은 패턴 오브젝트, 색·효과는 오브 속성.
     /// 같은 속성의 머미만 맞는다(맞으면 즉사).
     /// - A: 코페쉬가 Player 주위를 돌며 근접 공격
-    /// - B: 조준한 바닥 지점에 함정 설치, 같은 속성 머미가 밟으면 솟아 공격
-    /// - C: 클릭한 순간의 방향으로 보석 3연발
+    /// - B: Player 발밑에 함정 설치, 같은 속성 머미가 밟으면 솟아 공격
+    /// - C: 바라보는 방향으로 보석 3연발(소환 중 화면을 돌리면 따라 돎)
     /// - D: Player 현재 위치에 범위를 줄인 태양 낙하
-    /// - E: 클릭한 순간의 방향으로 창 2개 관통 사출
+    /// - E: 바라보는 방향으로 창 2개 관통 사출(소환 중 화면을 돌리면 따라 돎)
     /// </summary>
     public class PlayerStaffSkill : MonoBehaviour
     {
@@ -185,8 +185,8 @@ namespace HistoryCrash.Combat
         // ---------- B: 발밑 함정 ----------
         private IEnumerator RunB()
         {
-            Vector3 _pos = _target; _pos.y = FloorY;   // 조준한 지점(칸 가운데)
-            if (_grid != null) _pos = _grid.CellCenter(_grid.WorldToCell(_target), FloorY);
+            Vector3 _pos = _player.position; _pos.y = FloorY;
+            if (_grid != null) _pos = _grid.CellCenter(_grid.WorldToCell(_player.position), FloorY);
             transform.position = _pos;
             var _trap = Shape(transform, B_SIZE, new Vector3(90, 0, 0), 0.5f, 1.6f, 2.0f);   // 바닥 빛은 함정 범위 표시를 겸함
             _trap.localPosition = new Vector3(0, -B_SIZE * 0.35f, 0);   // 바닥에 반쯤 묻힌 대기 상태
@@ -241,7 +241,7 @@ namespace HistoryCrash.Combat
             while (_fired < C_COUNT)
             {
                 float _t = Time.time - _born;
-                Vector3 _f = _dir;   // 클릭한 순간의 방향 고정(시전 중 화면을 돌려도 바뀌지 않음)
+                Vector3 _f = _player ? FacingDir() : _dir;   // 소환 중에도 지금 화면 방향을 따라감
                 var _rot = Quaternion.LookRotation(_f, Vector3.up);
                 Vector3 _chest = _player.position + Vector3.up * 0.9f;
                 for (int _i = _fired; _i < C_COUNT; _i++)
@@ -280,6 +280,13 @@ namespace HistoryCrash.Combat
             }
             yield return new WaitForSeconds(C_RANGE / C_SPEED + 0.2f);
             Destroy(gameObject);
+        }
+
+        private Vector3 FacingDir()
+        {
+            var _cam = Camera.main;
+            Vector3 _d = _cam ? Vector3.ProjectOnPlane(_cam.transform.forward, Vector3.up) : _dir;
+            return _d.sqrMagnitude > 1e-4f ? _d.normalized : _dir;
         }
 
         private IEnumerator Projectile(Vector3 _start, Vector3 _d, float _speed, float _range, float _hitR, float _size, Vector3 _euler, bool _pierce, float _spin, float _dropToY = float.NaN, float _hitAhead = 0f)
@@ -459,7 +466,7 @@ namespace HistoryCrash.Combat
             while (_fired < _count)
             {
                 float _t = Time.time - _born;
-                Vector3 _f = _dir;   // 클릭한 순간의 방향 고정(시전 중 화면을 돌려도 바뀌지 않음)
+                Vector3 _f = _player ? FacingDir() : _dir;   // 소환 중에도 지금 화면 방향을 따라감
                 var _rot = Quaternion.LookRotation(_f, Vector3.up);
                 Vector3 _chest = _player.position + Vector3.up * 0.9f;
                 float _u = Mathf.Clamp01(_t / E_RISE);

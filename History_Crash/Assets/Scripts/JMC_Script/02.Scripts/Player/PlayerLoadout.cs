@@ -51,12 +51,7 @@ namespace HistoryCrash.Player
             if (!_animator) _animator = GetComponentInChildren<Animator>();
             if (!_model && _animator) _model = _animator.transform;
             if (Camera.main) _camera = Camera.main.transform;
-            // 공격 조준 (씬에 없으면 붙임)
-            _aim = GetComponent<PlayerAttackAim>();
-            if (!_aim) _aim = gameObject.AddComponent<PlayerAttackAim>();
         }
-
-        private PlayerAttackAim _aim;
 
         // 시전 중 이동 속도 배율 (KDH PlayerController의 ISpeedModifier)
         private float SpeedScale { set { if (_speed != null) _speed.SpeedMultiplier = value; } }
@@ -175,9 +170,7 @@ namespace HistoryCrash.Player
         private void Attack()
         {
             if (IsCasting) return;
-            // 클릭한 순간의 조준(B 지점, C·E 방향)을 고정. 발동 시점은 모션에 맞춘 그대로
-            var _aimed = _aim.Compute(HeldStaff);
-            StartCoroutine(CastRoutine(HeldStaff, HeldOrb, _aimed));
+            StartCoroutine(CastRoutine(HeldStaff, HeldOrb));
             HeldStaff = -1; HasOrb = false;   // 1회용
         }
 
@@ -199,7 +192,7 @@ namespace HistoryCrash.Player
 
         private bool InState(string _s) { return _animator && _animator.GetCurrentAnimatorStateInfo(0).IsName(_s); }
 
-        private System.Collections.IEnumerator CastRoutine(int _staff, Element _orb, PlayerAttackAim.AimResult _aimed)
+        private System.Collections.IEnumerator CastRoutine(int _staff, Element _orb)
         {
             IsCasting = true;
             HistoryCrash.Sound.GameSfx.Play("Player_Cast");
@@ -234,7 +227,7 @@ namespace HistoryCrash.Player
                 }
                 yield return null;
             }
-            FireSkill(_staff, _orb, _aimed);
+            FireSkill(_staff, _orb);
             yield return new WaitForSeconds(_castRecovery);
             foreach (var _ps in GetComponentsInChildren<ParticleSystem>()) if (_ps.name.StartsWith("Fx_Trail")) { var _em = _ps.emission; _em.rateOverTime = 0; _ps.transform.SetParent(null, true); Destroy(_ps.gameObject, 0.6f); }
             IsCasting = false;   // 다음 공격 허용
@@ -269,15 +262,18 @@ namespace HistoryCrash.Player
             else SpeedScale = 1f;
         }
 
-        private void FireSkill(int _heldStaff, Element _heldOrb, PlayerAttackAim.AimResult _aimed)
+        private void FireSkill(int _heldStaff, Element _heldOrb)
         {
             // 공격으로 오브를 소비: 지팡이 홀의 오브가 터지며 사라짐(시전 중 새 오브를 주웠다면 그대로 둠)
             if (!HasOrb) { _heldOrbForFx = _heldOrb; ClearSocketOrb(true); }
 
             // 주운 스태프의 패턴을 약화판으로 사용(모양 = 패턴 오브젝트, 색·효과 = 오브 속성)
-            // 방향·지점은 클릭한 순간에 고정한 값(시전 중 화면을 돌려도 바뀌지 않음). D는 지점 대신 시전 위치를 씀
+            // 방향 = 발사되는 순간의 화면 방향, B·D 위치 = 플레이어 자리
+            Vector3 _dir = _model ? _model.forward : transform.forward;
+            if (_camera) { _dir = Vector3.ProjectOnPlane(_camera.forward, Vector3.up); }
+            _dir.y = 0; _dir = _dir.sqrMagnitude > 1e-4f ? _dir.normalized : Vector3.forward;
             if (!_director) _director = FindFirstObjectByType<BossPatternDirector>();
-            PlayerStaffSkill.Cast(_heldStaff, _heldOrb, transform, _aimed.Dir, _aimed.Point, _grid, _director ? _director.PatternVisual(_heldStaff) : null);
+            PlayerStaffSkill.Cast(_heldStaff, _heldOrb, transform, _dir, _grid, _director ? _director.PatternVisual(_heldStaff) : null);
             Debug.Log("[Loadout] Attack staff " + _staffNames[_heldStaff] + " + orb " + ElementInfo.Name(_heldOrb));
         }
 
