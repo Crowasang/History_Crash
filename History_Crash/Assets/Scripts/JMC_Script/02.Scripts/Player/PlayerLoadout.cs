@@ -300,6 +300,7 @@ namespace HistoryCrash.Player
                 string _msg = HistoryCrash.UI.GameLanguage.T("[E] " + _what + " 줍기", "[E] Pick up " + _what);
                 GUI.Label(new Rect(Screen.width / 2 - 160, Screen.height * 0.62f, 320, 30), _msg, _style);
             }
+            if (!HistoryCrash.UI.DebugHudLayout.Show) return;   // 아래 Staff/Orb 글자는 디버그용
             string _staff = HeldStaff >= 0 ? _staffNames[HeldStaff] : "-";
             string _orb = HasOrb ? ElementInfo.NameKo(HeldOrb) : "-";
             GUI.Label(new Rect(20, HistoryCrash.UI.DebugHudLayout.Top + 84, 360, 20), "Staff: " + _staff + "   Orb: " + _orb + (CanAttack ? "   [좌클릭] 공격" : ""));

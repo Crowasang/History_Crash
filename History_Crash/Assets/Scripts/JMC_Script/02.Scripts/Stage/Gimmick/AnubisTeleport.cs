@@ -475,7 +475,7 @@ namespace HistoryCrash.Stage
 
         private void OnGUI()
         {
-            if (HistoryCrash.UI.PauseSettingsUI.IsOpen) return;   // 설정창이 열리면 OnGUI 글자는 그리지 않음(항상 UI 위에 그려지므로)
+            if (HistoryCrash.UI.PauseSettingsUI.IsOpen || !HistoryCrash.UI.DebugHudLayout.Show) return;   // 설정창이 열리면 OnGUI 글자는 그리지 않음(항상 UI 위에 그려지므로)
             if (!string.IsNullOrEmpty(Status)) GUI.Label(new Rect(20, HistoryCrash.UI.DebugHudLayout.Top + 104, 400, 20), Status);
         }
     }
