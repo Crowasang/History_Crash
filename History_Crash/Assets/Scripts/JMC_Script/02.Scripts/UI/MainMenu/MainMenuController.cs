@@ -887,6 +887,9 @@ namespace HistoryCrash.UI
             if (_cam) { _cam.clearFlags = CameraClearFlags.SolidColor; _cam.backgroundColor = Color.black; }
         }
 
+        // 영상 준비·첫 장면을 기다리는 최대 시간(초). 넘으면 기다리지 않고 진행 → 영상 문제로 메뉴가 영영 안 나오는 일 방지
+        private const float CLIP_WAIT_LIMIT = 4f;
+
         private async UniTask PlayClipAsync(VideoClip _clip, bool _loop, float _fade, CancellationToken _token)
         {
             if (!_clip) return;
@@ -894,9 +897,16 @@ namespace HistoryCrash.UI
             var _p = _vp[_back];
             _p.Stop(); _p.clip = _clip; _p.isLooping = _loop;
             _p.Prepare();
-            while (!_p.isPrepared) await NextFrame(_token);
+            for (float _t = 0f; !_p.isPrepared && _t < CLIP_WAIT_LIMIT; _t += Time.unscaledDeltaTime) await NextFrame(_token);
+            if (!_p.isPrepared) Debug.LogWarning("[MainMenu] 영상 준비가 늦어 기다리지 않고 진행: " + _clip.name);
             _p.Play();
-            while (_p.frame < 1) await NextFrame(_token);            // 첫 장면이 실제로 그려진 뒤 보여 줌(검은 깜빡임 방지)
+            // 첫 장면이 실제로 그려진 뒤 보여 줌(검은 깜빡임 방지). 재생이 멈춰 있으면 다시 걸고, 그래도 안 나오면 넘어감
+            for (float _t = 0f; _p.frame < 1 && _t < CLIP_WAIT_LIMIT; _t += Time.unscaledDeltaTime)
+            {
+                if (_p.isPrepared && !_p.isPlaying) _p.Play();
+                await NextFrame(_token);
+            }
+            if (_p.frame < 1) Debug.LogWarning("[MainMenu] 영상 첫 장면이 늦어 기다리지 않고 진행: " + _clip.name);
             if ((_clip == _introKo || _clip == _introEn) && _storyLoop && !_loopSrc.isPlaying)
             {
                 _loopSrc.clip = _storyLoop; _loopSrc.time = 0f; _loopSrc.volume = MusicVolume(); _loopSrc.Play();
@@ -925,8 +935,18 @@ namespace HistoryCrash.UI
             bool _done = false;
             VideoPlayer.EventHandler _h = _ => _done = true;
             _p.loopPointReached += _h;
-            while (!_done && (_p.isPlaying || _p.frame < 2)) await NextFrame(_token);
-            _p.loopPointReached -= _h;
+            try
+            {
+                // 재생이 멈춘 채(시작도 못 함) 일정 시간이 지나면 끝난 것으로 보고 넘어감
+                float _stalled = 0f;
+                while (!_done && (_p.isPlaying || _p.frame < 2) && _stalled < CLIP_WAIT_LIMIT)
+                {
+                    _stalled = _p.isPlaying ? 0f : _stalled + Time.unscaledDeltaTime;
+                    await NextFrame(_token);
+                }
+                if (_stalled >= CLIP_WAIT_LIMIT) Debug.LogWarning("[MainMenu] 영상이 재생되지 않아 기다리지 않고 진행: " + (_p.clip ? _p.clip.name : "-"));
+            }
+            finally { _p.loopPointReached -= _h; }
         }
 
         // ================= UI 만들기 =================
