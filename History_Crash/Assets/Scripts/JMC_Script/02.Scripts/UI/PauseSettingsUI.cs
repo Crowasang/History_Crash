@@ -159,6 +159,7 @@ namespace HistoryCrash.UI
             bool _has = _frames != null && _frames.Length > 1;
             _bookImg.sprite = _has ? _frames[0] : _bookStatic;
             var _seq = DOTween.Sequence().SetUpdate(true).SetLink(gameObject);
+            PlayBookSfx(true);   // 소리 안 표지 '탁'이 0.32초 = 다 올라와 표지가 넘어가는 순간
             // 1) 덮인 채로 올라옴(살짝 튀어 오름)
             _seq.Append(DOVirtual.Float(0f, 1f, _riseTime, _u =>
             {
@@ -166,8 +167,7 @@ namespace HistoryCrash.UI
                 SetBook(_has ? _closedShift : 0f, (1f - EaseOutBack(_u)) * -720f);
             }).SetEase(Ease.Linear));
             _seq.AppendCallback(() => { SetDim(1f); SetBook(_has ? _closedShift : 0f, 0f); });
-            // 2) 펼침 프레임 재생(표지가 넘어가는 동안 책등이 화면 가운데로 옴) — 메인메뉴와 같은 책장 넘김 소리
-            _seq.AppendCallback(PlayPageTurn);
+            // 2) 펼침 프레임 재생(표지가 넘어가는 동안 책등이 화면 가운데로 옴)
             if (_has)
                 _seq.Append(DOVirtual.Float(0f, 1f, _openTime, _u =>
                 {
@@ -188,7 +188,7 @@ namespace HistoryCrash.UI
             float _tText = _closeTime * 0.15f, _tFlip = _has ? _closeTime * 0.55f : 0f, _tDrop = _closeTime - _tText - _tFlip;
             var _seq = DOTween.Sequence().SetUpdate(true).SetLink(gameObject);
             _seq.Append(DOVirtual.Float(1f, 0f, _tText, SetContent).SetEase(Ease.Linear));
-            _seq.AppendCallback(() => SetContent(0f));
+            _seq.AppendCallback(() => { SetContent(0f); PlayBookSfx(false); });   // 소리 안 '탁'(0.22초)이 표지가 다 덮이는 순간과 맞음
             if (_has)
                 _seq.Append(DOVirtual.Float(1f, 0f, _tFlip, _u =>   // 거꾸로
                 {
@@ -612,11 +612,14 @@ namespace HistoryCrash.UI
             if (_hoverClip && SoundManager.Instance) SoundManager.Instance.PlaySfx(_hoverClip, 0.6f);   // 설정창이 열려 멈춘 동안에도 재생됨
         }
 
-        private AudioClip _pageClip;
-        private void PlayPageTurn()
+        // 도감 열림·닫힘 소리 = 메인메뉴 'Chronicles of the Magic Book'의 책 소리(표지 탁·책장 넘김)를 잘라 연출 시간에 맞춘 것
+        private AudioClip _openClip, _closeClip;
+        private void PlayBookSfx(bool _open)
         {
-            if (!_pageClip) _pageClip = Resources.Load<AudioClip>(TEX + "UI_PageTurn");
-            if (_pageClip && SoundManager.Instance) SoundManager.Instance.PlaySfx(_pageClip, 0.9f);
+            if (_open) { if (!_openClip) _openClip = Resources.Load<AudioClip>(TEX + "UI_Settings_Open"); }
+            else if (!_closeClip) _closeClip = Resources.Load<AudioClip>(TEX + "UI_Settings_Close");
+            var _c = _open ? _openClip : _closeClip;
+            if (_c && SoundManager.Instance) SoundManager.Instance.PlaySfx(_c, 0.9f);
         }
 
         private bool IsSelectedMenu(TextMeshProUGUI _t) { return _page >= 0 && _page < _menu.Length && _menu[_page] == _t; }

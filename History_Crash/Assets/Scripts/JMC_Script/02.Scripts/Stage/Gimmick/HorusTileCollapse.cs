@@ -419,7 +419,7 @@ namespace HistoryCrash.Stage
             foreach (HorusTile _t in _tiles)
             {
                 _t.R.GetPropertyBlock(_mpb);
-                if (_k <= 1.001f) _mpb.Clear(); else _mpb.SetColor("emissiveFactor", Color.white * _k);
+                if (_k <= 1.001f) _mpb.Clear(); else _mpb.SetColor("emissiveFactor", Color.white * (_k * EnvEmissionBoost.Factor));   // 신전 발광 배율(EnvEmissionBoost)에서 이어지게
                 _t.R.SetPropertyBlock(_mpb);
             }
         }
