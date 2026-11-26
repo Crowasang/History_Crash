@@ -1,3 +1,5 @@
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.Serialization;
@@ -133,19 +135,26 @@ namespace HistoryCrash.Player
             _socketOrb.SetParent(_staff, false);
             _socketOrb.localPosition = _socketLocal;
             _socketOrb.localRotation = Quaternion.identity;
-            StartCoroutine(InsertOrb(_socketOrb, _e));
+            InsertOrbAsync(_socketOrb, _e, destroyCancellationToken).Forget();
         }
 
-        private System.Collections.IEnumerator InsertOrb(Transform _t, Element _e)
+        // 다음 프레임까지 대기. LastUpdate = 모든 Update 뒤라 코루틴(yield return null)과 같은 순서. 취소되면 true
+        // (일시정지 때 컴포넌트가 꺼질 수 있으므로 OnDisable로 취소하지 않음 → 시전 중 IsCasting이 남지 않게)
+        private static UniTask<bool> NextFrame(CancellationToken _token)
+        {
+            return UniTask.Yield(PlayerLoopTiming.LastUpdate, _token).SuppressCancellationThrow();
+        }
+
+        private async UniTaskVoid InsertOrbAsync(Transform _t, Element _e, CancellationToken _token)
         {
             // 고리에 박히는 연출: 커지며 자리 잡고 속성 불티
             for (float _u = 0; _u < 1f && _t; _u += Time.deltaTime / 0.25f)
             {
                 float _k = 1f - (1f - _u) * (1f - _u);
                 _t.localScale = Vector3.one * _socketSize * Mathf.Lerp(1.6f, 1f, _k) * Mathf.Min(1f, _u * 3f);
-                yield return null;
+                if (await NextFrame(_token)) return;
             }
-            if (!_t) yield break;
+            if (!_t) return;
             _t.localScale = Vector3.one * _socketSize;
             ElementFx.Burst(_e, _t.position, 0.35f, 10);
         }
@@ -170,7 +179,7 @@ namespace HistoryCrash.Player
         private void Attack()
         {
             if (IsCasting) return;
-            StartCoroutine(CastRoutine(HeldStaff, HeldOrb));
+            CastAsync(HeldStaff, HeldOrb, destroyCancellationToken).Forget();
             HeldStaff = -1; HasOrb = false;   // 1회용
         }
 
@@ -192,7 +201,7 @@ namespace HistoryCrash.Player
 
         private bool InState(string _s) { return _animator && _animator.GetCurrentAnimatorStateInfo(0).IsName(_s); }
 
-        private System.Collections.IEnumerator CastRoutine(int _staff, Element _orb)
+        private async UniTaskVoid CastAsync(int _staff, Element _orb, CancellationToken _token)
         {
             IsCasting = true;
             HistoryCrash.Sound.GameSfx.Play("Player_Cast");
@@ -225,10 +234,10 @@ namespace HistoryCrash.Player
                         _playing = _want;
                     }
                 }
-                yield return null;
+                if (await NextFrame(_token)) return;
             }
             FireSkill(_staff, _orb);
-            yield return new WaitForSeconds(_castRecovery);
+            if (await UniTask.Delay(System.TimeSpan.FromSeconds(_castRecovery), cancellationToken: _token).SuppressCancellationThrow()) return;
             foreach (var _ps in GetComponentsInChildren<ParticleSystem>()) if (_ps.name.StartsWith("Fx_Trail")) { var _em = _ps.emission; _em.rateOverTime = 0; _ps.transform.SetParent(null, true); Destroy(_ps.gameObject, 0.6f); }
             IsCasting = false;   // 다음 공격 허용
 
@@ -251,7 +260,7 @@ namespace HistoryCrash.Player
                     }
                     SpeedScale = _playing == _standState ? 1f : _castMoveSpeedScale;
                     _guard -= Time.deltaTime;
-                    yield return null;
+                    if (await NextFrame(_token)) return;
                 }
                 if (!IsCasting)
                 {

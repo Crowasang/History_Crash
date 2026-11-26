@@ -1,5 +1,6 @@
-using System.Collections;
 using System.Collections.Generic;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Serialization;
 using HistoryCrash.Boss;
@@ -109,7 +110,26 @@ namespace HistoryCrash.Stage
             CreateParticles();
         }
 
-        private void Start() { StartCoroutine(Cycle()); }
+        private CancellationTokenSource _cycleCts;
+
+        private void Start()
+        {
+            _cycleCts = CancellationTokenSource.CreateLinkedTokenSource(destroyCancellationToken);
+            CycleAsync(_cycleCts.Token).Forget();
+        }
+
+        // 꺼지면(게임 종료 등) 코루틴처럼 주기도 멈춘다
+        private void OnDisable()
+        {
+            if (_cycleCts == null) return;
+            _cycleCts.Cancel(); _cycleCts.Dispose(); _cycleCts = null;
+        }
+
+        // 다음 프레임까지 대기. LastUpdate = 모든 Update 뒤라 코루틴(yield return null)과 같은 순서. 취소되면 true
+        private static UniTask<bool> NextFrame(CancellationToken _token)
+        {
+            return UniTask.Yield(PlayerLoopTiming.LastUpdate, _token).SuppressCancellationThrow();
+        }
 
         // 위에서 봤을 때 못 가는 구역 상자 안에 있는 점인지
         private bool IsUnreachable(Vector3 _p)
@@ -431,10 +451,10 @@ namespace HistoryCrash.Stage
         }
 
         // ---------- 주기 ----------
-        private IEnumerator Cycle()
+        private async UniTaskVoid CycleAsync(CancellationToken _token)
         {
             _phaseName = "wait"; _phaseEnd = Time.time + _firstDelay;
-            while (Time.time < _phaseEnd) yield return null;
+            while (Time.time < _phaseEnd) if (await NextFrame(_token)) return;
             while (true)
             {
                 float _cycleStart = Time.time;
@@ -455,7 +475,7 @@ namespace HistoryCrash.Stage
                     float _pulse = 0.55f + 0.45f * Mathf.Sin(_t * Mathf.Lerp(5f, 18f, _u));
                     SetWarnGlow(_warnGlowMax * Mathf.Lerp(0.35f, 1f, _u) * _pulse);
                     SetCrackEmission(_tiles, 1f + (_warnCrackEmission - 1f) * _pulse * _u);
-                    yield return null;
+                    if (await NextFrame(_token)) return;
                 }
                 SetEyes(1f);
 
@@ -472,12 +492,12 @@ namespace HistoryCrash.Stage
                         _tl.Mesh.localPosition = _tl.BasePos + Vector3.down * _sinkDepth * _u * _u / Mathf.Max(_tl.Mesh.parent.lossyScale.y, 1e-4f);
                         _tl.Mesh.localScale = _tl.BaseScale * (1f - _u * 0.6f);
                     }
-                    yield return null;
+                    if (await NextFrame(_token)) return;
                 }
                 foreach (HorusTile _tl in _tiles) _tl.R.enabled = false;
 
                 // 3) 사라진 채 유지: 심연에서 불씨가 올라옴
-                while (Time.time < _phaseEnd) { SetEyes(0.75f + 0.25f * Mathf.Sin(Time.time * 4f)); EmitEmbers(Time.deltaTime); yield return null; }
+                while (Time.time < _phaseEnd) { SetEyes(0.75f + 0.25f * Mathf.Sin(Time.time * 4f)); EmitEmbers(Time.deltaTime); if (await NextFrame(_token)) return; }
 
                 // 4) 수복: 아래에서 올라오며 커짐, 끝나면 구멍 해제. 눈은 꺼짐
                 _phaseName = "restore"; _phaseEnd = Time.time + _restoreAnimTime;
@@ -493,7 +513,7 @@ namespace HistoryCrash.Stage
                         _tl.Mesh.localScale = _tl.BaseScale * _e;
                     }
                     SetEyes(1f - _u);
-                    yield return null;
+                    if (await NextFrame(_token)) return;
                 }
                 foreach (HorusTile _tl in _tiles) { _tl.Mesh.localPosition = _tl.BasePos; _tl.Mesh.localScale = _tl.BaseScale; _grid.SetHole(_tl.Cell, false); SetTileCollider(_tl, true); if (_tl.Pit) _tl.Pit.SetActive(false); }
                 SetEyes(0f);
@@ -501,7 +521,7 @@ namespace HistoryCrash.Stage
                 _phaseName = "wait"; _currentType = ' ';
                 _doomedCells.Clear();
                 _phaseEnd = _cycleStart + _period;
-                while (Time.time < _phaseEnd) yield return null;
+                while (Time.time < _phaseEnd) if (await NextFrame(_token)) return;
             }
         }
 

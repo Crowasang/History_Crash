@@ -1,5 +1,6 @@
-using System.Collections;
 using System.Collections.Generic;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 using HistoryCrash.Boss;
 using HistoryCrash.CameraRig;
@@ -52,15 +53,21 @@ namespace HistoryCrash.Combat
             if (_pattern != 1) HistoryCrash.Sound.GameSfx.Play("Player_Attack" + "ABCDE"[Mathf.Clamp(_pattern, 0, 4)], _pattern == 3 ? 0.2f : 0f);
             switch (_pattern)
             {
-                case 0: _s.StartCoroutine(_s.RunA()); break;
-                case 1: _s.StartCoroutine(_s.RunB()); break;
-                case 2: _s.StartCoroutine(_s.RunC()); break;
-                case 3: _s.StartCoroutine(_s.RunD()); break;
-                default: _s.StartCoroutine(_s.RunE()); break;
+                case 0: _s.RunAAsync(_s.destroyCancellationToken).Forget(); break;
+                case 1: _s.RunBAsync(_s.destroyCancellationToken).Forget(); break;
+                case 2: _s.RunCAsync(_s.destroyCancellationToken).Forget(); break;
+                case 3: _s.RunDAsync(_s.destroyCancellationToken).Forget(); break;
+                default: _s.RunEAsync(_s.destroyCancellationToken).Forget(); break;
             }
         }
 
         // ---------- 공통 ----------
+        // 다음 프레임까지 대기. LastUpdate = 모든 Update 뒤라 코루틴(yield return null)과 같은 순서. 취소되면(스킬 오브젝트 파괴) true
+        private static UniTask<bool> NextFrame(CancellationToken _token)
+        {
+            return UniTask.Yield(PlayerLoopTiming.LastUpdate, _token).SuppressCancellationThrow();
+        }
+
         // 원래 재질에 속성색 발광만 더한 복사본(텍스처 유지). (원본 재질, 속성, 세기)별로 한 번만 만듦
         private static readonly Dictionary<string, Material> _tintCache = new Dictionary<string, Material>();
         private static Material TintMat(Material _src, Element _e, float _tint)
@@ -177,7 +184,7 @@ namespace HistoryCrash.Combat
         }
 
         // ---------- A: 코페쉬 회전 ----------
-        private IEnumerator RunA()
+        private async UniTaskVoid RunAAsync(CancellationToken _token)
         {
             var _blade = Shape(transform, A_SIZE, Vector3.zero, 0.6f, 1.8f, 1.4f);   // 텍스처 + 속성 발광 틴트 + 강한 점광원
             var _trail = ElementFx.Trail(_element, _blade, 0.17f, 80f);
@@ -192,14 +199,14 @@ namespace HistoryCrash.Combat
                 _blade.position = _c + new Vector3(Mathf.Sin(_ang), 0, Mathf.Cos(_ang)) * _r;
                 _blade.Rotate(Vector3.up, 1440f * Time.deltaTime, Space.World);
                 HitAround(_blade.position, A_HIT, _blade.position - _prev);
-                yield return null;
+                if (await NextFrame(_token)) return;
             }
             ElementFx.Burst(_element, _blade.position, 0.8f, 14);
             Finish(_trail);
         }
 
         // ---------- B: 발밑 함정 ----------
-        private IEnumerator RunB()
+        private async UniTaskVoid RunBAsync(CancellationToken _token)
         {
             Vector3 _pos = _player.position; _pos.y = FloorY;
             if (_grid != null) _pos = _grid.CellCenter(_grid.WorldToCell(_player.position), FloorY);
@@ -227,15 +234,15 @@ namespace HistoryCrash.Combat
                         float _u = _t / 0.12f;
                         _trap.localScale = new Vector3(1f, Mathf.Lerp(0.35f, 1.3f, _u), 1f);
                         _trap.localPosition = new Vector3(0, Mathf.Lerp(-B_SIZE * 0.35f, 0.1f, _u), 0);
-                        yield return null;
+                        if (await NextFrame(_token)) return;
                     }
                     ElementFx.Impact(_pos, ElementInfo.Color(_element), new Color(0.3f, 0.27f, 0.2f, 0.5f), 3.3f);
                     HitAround(_pos, B_TRIGGER + 0.15f, Vector3.up);
-                    yield return new WaitForSeconds(0.35f);
+                    if (await UniTask.Delay(System.TimeSpan.FromSeconds(0.35f), cancellationToken: _token).SuppressCancellationThrow()) return;
                     Finish(_glow);
-                    yield break;
+                    return;
                 }
-                yield return null;
+                if (await NextFrame(_token)) return;
             }
             Finish(_glow);
         }
@@ -247,7 +254,7 @@ namespace HistoryCrash.Combat
         /// <summary>사출~첫 발사까지 걸리는 시간. PlayerLoadout이 이만큼 먼저 Cast해서 첫 발사가 모션의 발사 시점과 맞게 함</summary>
         public const float C_SUMMON_LEAD = C_RISE + C_STAGGER * (C_COUNT - 1) + C_HOLD;
 
-        private IEnumerator RunC()
+        private async UniTaskVoid RunCAsync(CancellationToken _token)
         {
             var _gems = new Transform[C_COUNT];
             var _trails = new ParticleSystem[C_COUNT];
@@ -288,13 +295,13 @@ namespace HistoryCrash.Combat
                     var _g = _gems[_fired];
                     if (_trails[_fired]) { _trails[_fired].transform.SetParent(null, true); var _em = _trails[_fired].emission; _em.rateOverTime = 0; Destroy(_trails[_fired].gameObject, 0.6f); }
                     ElementFx.Burst(_element, _g.position, 0.6f, 12);
-                    StartCoroutine(Projectile(_g.position, _f, C_SPEED, C_RANGE, C_HIT, C_SIZE, Vector3.zero, false, 900f, _player.position.y + 0.35f));
+                    ProjectileAsync(_token, _g.position, _f, C_SPEED, C_RANGE, C_HIT, C_SIZE, Vector3.zero, false, 900f, _player.position.y + 0.35f).Forget();
                     Destroy(_g.gameObject);
                     _gems[_fired] = null; _fired++; _nextFire = _t + C_INTERVAL;   // 프레임이 튀어도 발사 간격 유지
                 }
-                yield return null;
+                if (await NextFrame(_token)) return;
             }
-            yield return new WaitForSeconds(C_RANGE / C_SPEED + 0.2f);
+            if (await UniTask.Delay(System.TimeSpan.FromSeconds(C_RANGE / C_SPEED + 0.2f), cancellationToken: _token).SuppressCancellationThrow()) return;
             Destroy(gameObject);
         }
 
@@ -305,7 +312,7 @@ namespace HistoryCrash.Combat
             return _d.sqrMagnitude > 1e-4f ? _d.normalized : _dir;
         }
 
-        private IEnumerator Projectile(Vector3 _start, Vector3 _d, float _speed, float _range, float _hitR, float _size, Vector3 _euler, bool _pierce, float _spin, float _dropToY = float.NaN, float _hitAhead = 0f)
+        private async UniTaskVoid ProjectileAsync(CancellationToken _token, Vector3 _start, Vector3 _d, float _speed, float _range, float _hitR, float _size, Vector3 _euler, bool _pierce, float _spin, float _dropToY = float.NaN, float _hitAhead = 0f)
         {
             float _startY = _start.y;
             var _holder = new GameObject("Shot").transform;
@@ -332,7 +339,7 @@ namespace HistoryCrash.Combat
                     else if (_traveled > _wallFrom && WallDeep(_holder.position)) _stop = true;
                 }
                 if (_spin != 0f) _shape.Rotate(Vector3.forward, _spin * Time.deltaTime, Space.Self);
-                if (!_stop) yield return null;
+                if (!_stop) if (await NextFrame(_token)) return;
             }
             ElementFx.Burst(_element, _holder.position, 0.9f, 18);
             if (_trail) { _trail.transform.SetParent(null, true); var _em = _trail.emission; _em.rateOverTime = 0; Destroy(_trail.gameObject, 0.8f); }
@@ -344,7 +351,7 @@ namespace HistoryCrash.Combat
         // 이후 오브가 마법진 중앙으로 떨어져 범위 안 같은 속성 머미를 맞힘. 마법진 바깥 고리 = 실제 타격 범위.
         public const float D_GROW = 0.2f, D_HOVER = 0.55f, D_DRAW = 0.35f;
 
-        private IEnumerator RunD()
+        private async UniTaskVoid RunDAsync(CancellationToken _token)
         {
             Vector3 _ground = _player.position; _ground.y = FloorY;
             transform.position = _ground;
@@ -365,7 +372,7 @@ namespace HistoryCrash.Combat
                 float _d = Mathf.Clamp01(_t / D_DRAW);
                 float _pulse = 0.55f + 0.45f * Mathf.Abs(Mathf.Sin(_t * Mathf.Lerp(5f, 16f, _t / _wait)));
                 _circle.Set(_d, _pulse, _t);
-                yield return null;
+                if (await NextFrame(_token)) return;
             }
             for (float _t = 0; _t < D_FALL_TIME; _t += Time.deltaTime)
             {
@@ -373,7 +380,7 @@ namespace HistoryCrash.Combat
                 _sun.localPosition = Vector3.up * Mathf.Lerp(D_HEIGHT, D_SIZE * 0.4f, _u * _u);
                 _sun.Rotate(Vector3.up, 360f * Time.deltaTime, Space.World);
                 _circle.Set(1f, 1f, _wait + _t);
-                yield return null;
+                if (await NextFrame(_token)) return;
             }
             ElementFx.Impact(_ground, _c, new Color(0.3f, 0.27f, 0.2f, 0.55f), 1.6f);
             ElementFx.Burst(_element, _ground + Vector3.up * 0.3f, 1.8f, 40);
@@ -384,7 +391,7 @@ namespace HistoryCrash.Combat
             {
                 float _u = _t / 0.45f;
                 _circle.Set(1f, Mathf.Lerp(1.6f, 0f, _u), 1f + _t, 1f + _u * 0.08f);
-                yield return null;
+                if (await NextFrame(_token)) return;
             }
             Finish(_trail);
         }
@@ -467,7 +474,7 @@ namespace HistoryCrash.Combat
         /// <summary>소환~첫 사출까지 걸리는 시간. PlayerLoadout이 이만큼 먼저 Cast해서 사출을 모션 발사 시점에 맞춤</summary>
         public const float E_SUMMON_LEAD = E_RISE + E_HOLD;
 
-        private IEnumerator RunE()
+        private async UniTaskVoid RunEAsync(CancellationToken _token)
         {
             int _count = _e_Slots.Length;
             var _spears = new Transform[_count];
@@ -507,13 +514,13 @@ namespace HistoryCrash.Combat
                     if (_trails[_fired]) { _trails[_fired].transform.SetParent(null, true); var _em = _trails[_fired].emission; _em.rateOverTime = 0; Destroy(_trails[_fired].gameObject, 0.6f); }
                     Destroy(_sp.gameObject);
                     ElementFx.Burst(_element, _start, 0.7f, 14);
-                    StartCoroutine(Projectile(_start, _f, E_SPEED, E_RANGE, E_HIT, E_SIZE, _e_Euler, true, 0f, _player.position.y + 0.5f, E_SIZE * 0.4f));   // 판정은 창끝·몸통
+                    ProjectileAsync(_token, _start, _f, E_SPEED, E_RANGE, E_HIT, E_SIZE, _e_Euler, true, 0f, _player.position.y + 0.5f, E_SIZE * 0.4f).Forget();   // 판정은 창끝·몸통
                     _fired++;
                     continue;   // 같은 프레임에 다음 창 조건도 바로 확인
                 }
-                yield return null;
+                if (await NextFrame(_token)) return;
             }
-            yield return new WaitForSeconds(E_RANGE / E_SPEED + 0.3f);
+            if (await UniTask.Delay(System.TimeSpan.FromSeconds(E_RANGE / E_SPEED + 0.3f), cancellationToken: _token).SuppressCancellationThrow()) return;
             Destroy(gameObject);
         }
     }

@@ -1,4 +1,5 @@
-using System.Collections;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Animations;
 using UnityEngine.InputSystem;
@@ -178,7 +179,19 @@ namespace HistoryCrash.Boss
             _mpb = new MaterialPropertyBlock();
         }
 
-        private void Start() { StartCoroutine(Loop()); }
+        private CancellationTokenSource _loopCts;
+
+        private void Start()
+        {
+            _loopCts = CancellationTokenSource.CreateLinkedTokenSource(destroyCancellationToken);
+            LoopAsync(_loopCts.Token).Forget();
+        }
+
+        // 다음 프레임까지 대기. LastUpdate = 모든 Update 뒤(LateUpdate 전)라 코루틴(yield return null)과 같은 순서. 취소되면 true
+        private static UniTask<bool> NextFrame(CancellationToken _token)
+        {
+            return UniTask.Yield(PlayerLoopTiming.LastUpdate, _token).SuppressCancellationThrow();
+        }
 
         // ---------- 패턴 B: 함정 여러 개 ----------
         private Transform[] _bRoots; private Animator[] _bAnims;
@@ -229,24 +242,25 @@ namespace HistoryCrash.Boss
             _a.Update(0f);
         }
 
-        private IEnumerator Loop()
+        private async UniTaskVoid LoopAsync(CancellationToken _token)
         {
-            yield return new WaitForSeconds(_startDelay);
+            if (await UniTask.Delay(System.TimeSpan.FromSeconds(_startDelay), cancellationToken: _token).SuppressCancellationThrow()) return;
             int _next = 0;
             while (true)
             {
-                while (!_autoLoop && _queued < 0) yield return null;
+                while (!_autoLoop && _queued < 0) if (await NextFrame(_token)) return;
                 int _p = _queued >= 0 ? _queued : _next;
                 _queued = -1;
-                yield return Cast(_p);
+                if (await CastAsync(_p, _token)) return;   // 취소되면 true
                 OnPatternGap?.Invoke();   // 패턴과 패턴 사이(머미 소환 등)
                 _next = (_p + 1) % 5;
                 float _wait = _gapBetweenPatterns;
-                while (_wait > 0 && _queued < 0) { _wait -= Time.deltaTime * _tempo; yield return null; }
+                while (_wait > 0 && _queued < 0) { _wait -= Time.deltaTime * _tempo; if (await NextFrame(_token)) return; }
             }
         }
 
-        private IEnumerator Cast(int _p)
+        // 시전 하나. 취소되면(오브젝트가 꺼짐) true
+        private async UniTask<bool> CastAsync(int _p, CancellationToken _token)
         {
             for (int _i = 0; _i < _hitFlags.Length; _i++) _hitFlags[_i] = false;
             BeginTargeting(_p);
@@ -259,7 +273,7 @@ namespace HistoryCrash.Boss
                 for (float _w = 0; _w < _bWarnTime; _w += Time.deltaTime * _tempo)
                 {
                     WarnTraps(_w);
-                    yield return null;
+                    if (await NextFrame(_token)) return true;
                 }
             }
 
@@ -283,7 +297,7 @@ namespace HistoryCrash.Boss
 
             PlayCastSfx(_p);
 
-            while (_castTime < _castLength[_p]) yield return null;
+            while (_castTime < _castLength[_p]) if (await NextFrame(_token)) return true;
 
             // B: 솟았던 함정 중 한 곳에 스태프
             if (_p == (int)BossPattern.B && _staffDropper)
@@ -298,6 +312,7 @@ namespace HistoryCrash.Boss
             foreach (var _w in _warns) _w.FadeOut();
             if (_pharaohAnimator) { _pharaohAnimator.speed = 1f; _pharaohAnimator.CrossFadeInFixedTime("Idle", 0.33f); }
             _current = -1;
+            return false;
         }
 
         // ---------- 소리 ----------
@@ -585,7 +600,12 @@ namespace HistoryCrash.Boss
         /// <summary>바닥 예고를 모두 바로 끈다(클리어 연출 시작 등).</summary>
         public void HideTelegraphs() { foreach (var _w in _warns) _w.Hide(); }
 
-        private void OnDisable() { HideTelegraphs(); }
+        private void OnDisable()
+        {
+            HideTelegraphs();
+            // 게임이 끝나 꺼지면(ActiveOnlyWhilePlaying) 코루틴처럼 패턴 루프도 멈춘다
+            if (_loopCts != null) { _loopCts.Cancel(); _loopCts.Dispose(); _loopCts = null; }
+        }
 
         private void Strike(int _i, float _hold = 0f)
         {

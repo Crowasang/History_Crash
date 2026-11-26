@@ -1,5 +1,6 @@
-using System.Collections;
 using System.Collections.Generic;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.Serialization;
@@ -78,7 +79,7 @@ namespace HistoryCrash.Boss
         public void Drop(int _pattern, Vector3 _world, Transform _iconSource)
         {
             if (_grid == null) return;
-            // 패턴에 맞아 죽는 순간 게임이 끝나 이 오브젝트가 꺼지면(ActiveOnlyWhilePlaying) 코루틴을 시작할 수 없어 에러가 남 → 떨어뜨리지 않음
+            // 패턴에 맞아 죽는 순간 게임이 끝나 이 오브젝트가 꺼지면(ActiveOnlyWhilePlaying) 떨어뜨리지 않음
             if (!isActiveAndEnabled) return;
             var _cell = FreeCell(_grid.WorldToCell(_world));
             Vector3 _center = _grid.CellCenter(_cell, _grid.FloorTopY);
@@ -91,7 +92,28 @@ namespace HistoryCrash.Boss
             _item.Kind = PickupKind.Staff; _item.Value = _pattern; _item.Cell = _cell; _item.Ready = false;
             StaffDropEntry _d = new StaffDropEntry { Root = _root, Pattern = _pattern, Cell = _cell };
             _drops.Add(_d);
-            StartCoroutine(Fall(_d, _icon, _center));
+            FallAsync(_d, _icon, _center, DropToken()).Forget();
+        }
+
+        // 떨어지기·떠 있기 취소용. 게임이 끝나 꺼지면 코루틴처럼 멈춘다
+        private CancellationTokenSource _dropCts;
+
+        private CancellationToken DropToken()
+        {
+            if (_dropCts == null) _dropCts = CancellationTokenSource.CreateLinkedTokenSource(destroyCancellationToken);
+            return _dropCts.Token;
+        }
+
+        private void OnDisable()
+        {
+            if (_dropCts == null) return;
+            _dropCts.Cancel(); _dropCts.Dispose(); _dropCts = null;
+        }
+
+        // 다음 프레임까지 대기. LastUpdate = 모든 Update 뒤라 코루틴(yield return null)과 같은 순서. 취소되면 true
+        private static UniTask<bool> NextFrame(CancellationToken _token)
+        {
+            return UniTask.Yield(PlayerLoopTiming.LastUpdate, _token).SuppressCancellationThrow();
         }
 
         private Vector2Int FreeCell(Vector2Int _c)
@@ -115,7 +137,7 @@ namespace HistoryCrash.Boss
             return _grid.NearestSolid(_c);
         }
 
-        private IEnumerator Fall(StaffDropEntry _d, Transform _icon, Vector3 _rest)
+        private async UniTaskVoid FallAsync(StaffDropEntry _d, Transform _icon, Vector3 _rest, CancellationToken _token)
         {
             var _root = _d.Root.transform;
             float _y = _dropHeight, _v = _startSpeed;
@@ -129,9 +151,9 @@ namespace HistoryCrash.Boss
                 _v += _gravity * Time.deltaTime;
                 _y = Mathf.Max(0f, _y - _v * Time.deltaTime);
                 _root.position = _rest + Vector3.up * _y;
-                yield return null;
+                if (await NextFrame(_token)) return;
             }
-            if (!_root) yield break;
+            if (!_root) return;
             var _em = _streak.emission; _em.rateOverTime = 0f; _streak.transform.SetParent(null, true); Destroy(_streak.gameObject, 0.8f);
             // 착지: 먼지 고리 + 불티, 눌렸다가 튕겨 올라옴
             ElementFx.Impact(_rest, _impactSparkColor, _impactDustColor, 1f);
@@ -141,9 +163,9 @@ namespace HistoryCrash.Boss
                 float _u = _t / _impactReboundTime;
                 float _sink = _impactSink * (1f - _u) * (1f - _u) * Mathf.Cos(_u * Mathf.PI * 1.5f);
                 _root.position = _rest - Vector3.up * _sink;
-                yield return null;
+                if (await NextFrame(_token)) return;
             }
-            if (!_root) yield break;
+            if (!_root) return;
             _root.position = _rest;
             _d.Landed = true; _d.LandTime = Time.time;
             var _pick = _root.GetComponent<PickupItem>(); if (_pick) _pick.Ready = true;
@@ -153,21 +175,21 @@ namespace HistoryCrash.Boss
             {
                 float _u = _t / _wobbleTime;
                 _root.rotation = Quaternion.AngleAxis(_wobbleAngle * (1f - _u) * Mathf.Sin(_u * Mathf.PI * 5f), _axis);
-                yield return null;
+                if (await NextFrame(_token)) return;
             }
-            if (!_root) yield break;
+            if (!_root) return;
             _root.rotation = Quaternion.identity;
-            if (_icon) StartCoroutine(Hover(_icon));
+            if (_icon) HoverAsync(_icon, _token).Forget();
         }
 
-        private IEnumerator Hover(Transform _icon)
+        private async UniTaskVoid HoverAsync(Transform _icon, CancellationToken _token)
         {
             Vector3 _basePos = _icon.localPosition;
             for (float _t = 0f; _icon; _t += Time.deltaTime)
             {
                 _icon.localPosition = _basePos + Vector3.up * (_hoverGap * Mathf.SmoothStep(0f, 1f, _t / 0.5f) + Mathf.Sin(_t * _iconBobSpeed) * _iconBob);
                 _icon.Rotate(Vector3.up, _iconSpin * Time.deltaTime, Space.World);
-                yield return null;
+                if (await NextFrame(_token)) return;
             }
         }
 

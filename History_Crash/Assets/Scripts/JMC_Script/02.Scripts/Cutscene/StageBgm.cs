@@ -1,4 +1,5 @@
-using System.Collections;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using HistoryCrash.UI;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -46,14 +47,20 @@ namespace HistoryCrash.Cutscene
             }
         }
 
-        private IEnumerator Start()
+        private void Start()
         {
             _src = gameObject.AddComponent<AudioSource>();
             _src.clip = Resources.Load<AudioClip>(CLIP);
             _src.loop = true; _src.playOnAwake = false; _src.spatialBlend = 0f; _src.ignoreListenerPause = true; _src.volume = 0f;
-            if (!_src.clip) { Debug.LogWarning("[StageBgm] 배경음을 찾지 못함: Resources/" + CLIP); yield break; }
-            yield return null;
-            while (IntroRunning()) yield return null;
+            if (!_src.clip) { Debug.LogWarning("[StageBgm] 배경음을 찾지 못함: Resources/" + CLIP); return; }
+            PlayAfterIntroAsync(destroyCancellationToken).Forget();
+        }
+
+        // 한 프레임 쉬고(컷씬이 생길 틈), 컷씬·책 전환이 끝날 때까지 기다렸다가 튼다
+        private async UniTaskVoid PlayAfterIntroAsync(CancellationToken _token)
+        {
+            if (await UniTask.Yield(_token).SuppressCancellationThrow()) return;
+            if (await UniTask.WaitWhile(IntroRunning, cancellationToken: _token).SuppressCancellationThrow()) return;
             if (_target > 0f) _src.Play();
         }
 

@@ -1,5 +1,6 @@
-using System.Collections;
 using System.Collections.Generic;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Serialization;
 using HistoryCrash.Boss;
@@ -49,6 +50,21 @@ namespace HistoryCrash.Enemy
 
         private void OnDestroy() { if (_director) _director.OnPatternGap -= SpawnWave; }
 
+        // 소환 중인 작업 취소용. 게임이 끝나 소환기가 꺼지면(ActiveOnlyWhilePlaying) 코루틴처럼 소환도 멈춘다
+        private CancellationTokenSource _spawnCts;
+
+        private void OnDisable()
+        {
+            if (_spawnCts == null) return;
+            _spawnCts.Cancel(); _spawnCts.Dispose(); _spawnCts = null;
+        }
+
+        private CancellationToken SpawnToken()
+        {
+            if (_spawnCts == null) _spawnCts = CancellationTokenSource.CreateLinkedTokenSource(destroyCancellationToken);
+            return _spawnCts.Token;
+        }
+
         private void EnsureSpawnCells()
         {
             if (_spawnCells.Count > 0 || _grid == null || !_pharaoh) return;
@@ -67,21 +83,22 @@ namespace HistoryCrash.Enemy
         public void SpawnWave()
         {
             if (_pharaohHealth != null && !_pharaohHealth.IsAlive) return;
+            if (!isActiveAndEnabled) return;   // 게임이 끝나 꺼진 뒤에는 소환하지 않음
             for (int _i = 0; _i < _perGap; _i++)
             {
                 // 아직 솟아오르는 중인 머미(pending)까지 세어 최대 수를 넘지 않게
                 if (Mummy.Alive.Count + _pending >= _maxAlive) return;
                 _pending++;
-                StartCoroutine(SpawnOne());
+                SpawnOneAsync(SpawnToken()).Forget();
             }
         }
 
         private int _pending;
 
-        private IEnumerator SpawnOne()
+        private async UniTaskVoid SpawnOneAsync(CancellationToken _token)
         {
             EnsureSpawnCells();
-            if (_spawnCells.Count == 0) { _pending--; yield break; }
+            if (_spawnCells.Count == 0) { _pending--; return; }
             // 다른 머미와 가장 멀리 떨어진 후보 칸(같으면 무작위)
             Vector2Int _cell = _spawnCells[Random.Range(0, _spawnCells.Count)]; float _bestGap = -1f;
             foreach (var _c in _spawnCells)
@@ -96,7 +113,11 @@ namespace HistoryCrash.Enemy
             Vector3 _floor = _grid.CellCenter(_cell, _grid.FloorTopY);
 
             ElementFx.Flame(_element, _floor, _flameTime + _riseTime, 0.42f);
-            yield return new WaitForSeconds(_flameTime * 0.6f);
+            if (await UniTask.Delay(System.TimeSpan.FromSeconds(_flameTime * 0.6f), cancellationToken: _token).SuppressCancellationThrow())
+            {
+                _pending--;   // 생성 전에 멈춤 → 대기 수에서 빼 둠
+                return;
+            }
 
             var _prefab = _gender == MummyGender.Female ? _femalePrefab : _malePrefab;
             // 소환기 자식으로 생성: 게임이 끝나 소환기가 꺼지면(ActiveOnlyWhilePlaying) 미라도 함께 멈춤
@@ -115,7 +136,7 @@ namespace HistoryCrash.Enemy
             {
                 float _u = _t / _riseTime; _u = 1f - (1f - _u) * (1f - _u);
                 _go.transform.position = Vector3.Lerp(_bottom, _top, _u);
-                yield return null;
+                if (await UniTask.Yield(_token).SuppressCancellationThrow()) return;
             }
             _go.transform.position = _top;
             _m.Activate();

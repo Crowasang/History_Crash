@@ -1,6 +1,7 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using DG.Tweening;
 using TMPro;
 using UnityEngine;
@@ -176,7 +177,7 @@ namespace HistoryCrash.UI
             // Settings 메뉴 = 게임 안 ESC 설정창과 같은 도감(자기 Canvas를 만들므로 따로 된 오브젝트에)
             _settings = new GameObject("UI_PauseSettings").AddComponent<PauseSettingsUI>();
             _settings.AllowEscOpen = false;   // 메인메뉴에서는 Esc로 열리지 않음(Settings 메뉴로만, 열린 창은 Esc로 닫힘)
-            StartCoroutine(Intro());
+            IntroAsync(destroyCancellationToken).Forget();
         }
 
         private void OnDestroy()
@@ -186,41 +187,41 @@ namespace HistoryCrash.UI
         }
 
         // ================= 흐름 =================
-        private IEnumerator Intro()
+        private async UniTask IntroAsync(CancellationToken _token)
         {
             _menuGroup.alpha = 0f; _menuGroup.interactable = false;
-            if (_testFromIntroEnd) { SetAlpha(_black, 0f); _titleGroup.alpha = 0f; StartCoroutine(StartGame()); yield break; }
-            yield return PlayLogo();
+            if (_testFromIntroEnd) { SetAlpha(_black, 0f); _titleGroup.alpha = 0f; StartGameAsync(_token).Forget(); return; }
+            await PlayLogoAsync(_token);
             if (_playPinAnim)
             {
                 // 핀이 처음 꽂히는 연출 → 핀 꽂힌 반복 배경
-                yield return PlayClip(_pinPlant, false, 0f);
-                yield return WaitClipEnd();
+                await PlayClipAsync(_pinPlant, false, 0f, _token);
+                await WaitClipEndAsync(_token);
                 PlayerPrefs.SetInt(K_PIN_SHOWN_EGYPT, 1); PlayerPrefs.Save();
-                yield return PlayClip(_loopPin, true, _crossFade);
+                await PlayClipAsync(_loopPin, true, _crossFade, _token);
             }
-            else yield return PlayClip(_entered ? _loopPin : _loopNoPin, true, 0f);
-            yield return Fade(_black, 1f, 0f, 0.6f);
-            yield return FadeGroup(_menuGroup, 0f, 1f, 0.5f);
+            else await PlayClipAsync(_entered ? _loopPin : _loopNoPin, true, 0f, _token);
+            await FadeAsync(_black, 1f, 0f, 0.6f, _token);
+            await FadeGroupAsync(_menuGroup, 0f, 1f, 0.5f, _token);
             _menuGroup.interactable = true;
         }
 
-        private IEnumerator StartGame()
+        private async UniTask StartGameAsync(CancellationToken _token)
         {
             _busy = true; _menuGroup.interactable = false;
-            StartCoroutine(FadeGroup(_menuGroup, 1f, 0f, 0.35f));
-            StartCoroutine(FadeGroup(_titleGroup, 1f, 0f, 0.5f));      // 제목 로고도 함께 사라짐(도감 안으로 들어가면 없어야 함)
+            FadeGroupAsync(_menuGroup, 1f, 0f, 0.35f, _token).Forget();
+            FadeGroupAsync(_titleGroup, 1f, 0f, 0.5f, _token).Forget();      // 제목 로고도 함께 사라짐(도감 안으로 들어가면 없어야 함)
             // 도감으로 줌인 → 책이 펼쳐지며 화면을 채움
             if (!_testFromIntroEnd)
             {
-                yield return PlayClip(_entered ? _zoomPin : _zoomNoPin, false, _crossFade);
-                yield return WaitClipEnd();
+                await PlayClipAsync(_entered ? _zoomPin : _zoomNoPin, false, _crossFade, _token);
+                await WaitClipEndAsync(_token);
             }
             // 펼친 도감에서 인트로(줌인 마지막 장면과 인트로 첫 장면이 같은 책이라 바로 이어짐)
             var _intro = GameLanguage.IsKorean ? _introKo : _introEn;
             if (_intro)
             {
-                yield return PlayClip(_intro, false, 0.2f);
+                await PlayClipAsync(_intro, false, 0.2f, _token);
                 var _p = _vp[_front];
                 long _hold = (long)_p.frameCount - HOLD_BEFORE_END;      // 영상 끝의 암전 직전 장면에서 멈춤
                 // 건너뛰기는 우측 책갈피(Skip)를 눌렀을 때만 — 아무 데나 클릭해도 넘어가지 않음
@@ -234,10 +235,10 @@ namespace HistoryCrash.UI
                         var _src = _as[_front]; if (_src.clip) _src.time = Mathf.Clamp(_hold / (float)_p.frameRate, 0f, _src.clip.length - 0.01f);
                         break;
                     }
-                    yield return null;
+                    await NextFrame(_token);
                 }
                 _p.Pause();
-                for (int i = 0; i < 3; i++) yield return null;           // 건너뛴 장면이 그려질 때까지
+                for (int i = 0; i < 3; i++) await NextFrame(_token);           // 건너뛴 장면이 그려질 때까지
                 // 시네마틱이 끝나면 같은 책갈피가 '다음 장' 버튼으로 바뀜 → 조작법 → 튜토리얼 → 마지막 장에서 '모험 시작'
                 // 장 번호: 0 = 이야기, 1 = 조작법, 2~ = 튜토리얼. 우측 = 다음 장, 좌측 = 이전 장
                 int _page = 0, _lastPage = _pageGroups.Count;
@@ -245,34 +246,34 @@ namespace HistoryCrash.UI
                 while (true)
                 {
                     ShowSkip(_page >= 1 && _page < _lastPage);                   // 마지막 장은 '모험 시작'이 있으므로 건너뛰기 없음
-                    yield return WaitBookmark(_page == _lastPage ? 2 : 1, _page > 0);
+                    await WaitBookmarkAsync(_page == _lastPage ? 2 : 1, _page > 0, _token);
                     ShowSkip(false);
                     if (_skipTutorial) break;                                    // 남은 장을 건너뛰고 바로 게임으로
                     if (_choseBack)
                     {
-                        if (_page == 1) yield return TurnBackToStory();
-                        else yield return TurnBetween(_pageGroups[_page - 1], _pageGroups[_page - 2], false);
+                        if (_page == 1) await TurnBackToStoryAsync(_token);
+                        else await TurnBetweenAsync(_pageGroups[_page - 1], _pageGroups[_page - 2], false, _token);
                         _page--;
                     }
                     else if (_page == _lastPage) break;
                     else
                     {
-                        if (_page == 0) yield return TurnToControls();
-                        else yield return TurnBetween(_pageGroups[_page - 1], _pageGroups[_page], true);
+                        if (_page == 0) await TurnToControlsAsync(_token);
+                        else await TurnBetweenAsync(_pageGroups[_page - 1], _pageGroups[_page], true, _token);
                         _page++;
                     }
                 }
                 ShowBookmark(false);
                 // 지금 장 글자가 걷힘 → (게임 씬으로) 도감이 줌아웃되며 뒤로 게임 화면, 책이 덮여 아래로 내려감
-                yield return FadeGroup(_pageGroups[_page - 1], 1f, 0f, 0.45f);
+                await FadeGroupAsync(_pageGroups[_page - 1], 1f, 0f, 0.45f, _token);
                 foreach (var _src in _as) if (_src && _src.isPlaying) _src.DOFade(0f, 0.5f).SetUpdate(true).SetLink(gameObject);   // 게임으로 넘어가며 소리도 잦아듦
                 if (_loopSrc && _loopSrc.isPlaying) _loopSrc.DOFade(0f, 0.5f).SetUpdate(true).SetLink(gameObject);
                 BookToGameTransition.Create(_bookSpread);
                 LoadGameScene();
-                yield break;
+                return;
             }
             // 인트로 영상이 없을 때: 그냥 어두워졌다가 게임 씬
-            yield return Fade(_black, 0f, 1f, 0.6f);
+            await FadeAsync(_black, 0f, 1f, 0.6f, _token);
             LoadGameScene();
         }
 
@@ -304,24 +305,24 @@ namespace HistoryCrash.UI
         private const float SPINE_X = 960f;                     // 펼친 책의 가운데(책등) — 영상·책 그림 기준 px
 
         /// <summary>우측 페이지 하단에 넘김 표시(살짝 숨 쉬듯 깜빡임)를 띄우고 클릭·키를 기다린다</summary>
-        private IEnumerator WaitPageTurn(string _label)
+        private async UniTask WaitPageTurnAsync(string _label, CancellationToken _token)
         {
             _turnLabel.text = _label + "  ›";
             ApplyFont(_turnLabel, 26f);
             _turnGroup.gameObject.SetActive(true);
-            yield return FadeGroup(_turnGroup, 0f, 1f, 0.4f);
+            await FadeGroupAsync(_turnGroup, 0f, 1f, 0.4f, _token);
             _skipRequested = false;
             // 숨 쉬듯 깜빡임(1 ↔ 0.6 왕복)
             var _pulse = _turnGroup.DOFade(0.6f, 0.98f).SetEase(Ease.InOutSine).SetLoops(-1, LoopType.Yoyo).SetUpdate(true).SetLink(_turnGroup.gameObject);
-            while (!_skipRequested) yield return null;
+            while (!_skipRequested) await NextFrame(_token);
             _pulse.Kill();
             _skipRequested = false;
-            yield return FadeGroup(_turnGroup, _turnGroup.alpha, 0f, 0.15f);
+            await FadeGroupAsync(_turnGroup, _turnGroup.alpha, 0f, 0.15f, _token);
             _turnGroup.gameObject.SetActive(false);
         }
 
         /// <summary>오른쪽 페이지가 책등을 축으로 넘어가며 조작법 펼침면이 나타난다</summary>
-        private IEnumerator TurnToControls()
+        private async UniTask TurnToControlsAsync(CancellationToken _token)
         {
             // 지금 화면(인트로 마지막 장면)을 멈춰 둔 사본
             if (_snapRT == null)
@@ -342,18 +343,18 @@ namespace HistoryCrash.UI
             _flip.Append(DOVirtual.Float(1f, 0f, 0.425f, _k => SetFlip(_flipFront, _k, Mathf.Lerp(0.55f, 1f, _k))).SetEase(Ease.InSine));
             _flip.AppendCallback(() => { _flipFront.gameObject.SetActive(false); _flipBack.gameObject.SetActive(true); });
             _flip.Append(DOVirtual.Float(0f, 1f, 0.425f, _k => SetFlip(_flipBack, _k, Mathf.Lerp(0.55f, 1f, _k))).SetEase(Ease.OutSine));
-            yield return _flip.WaitForCompletion();
+            await WaitTween(_flip, _token);
             _oldLeft.gameObject.SetActive(false); _flipFront.gameObject.SetActive(false); _flipBack.gameObject.SetActive(false);
             // 영상 레이어는 이제 안 씀
             _vp[_front].Stop(); SetAlpha(_vimg[_front], 0f);
             // 조작법 글자가 잉크처럼 번져 나타남
-            yield return FadeGroup(_ctrlGroup, 0f, 1f, 0.6f);
+            await FadeGroupAsync(_ctrlGroup, 0f, 1f, 0.6f, _token);
         }
 
         /// <summary>왼쪽 페이지가 책등을 축으로 오른쪽으로 넘어가며 이야기(인트로 마지막) 펼침면으로 되돌아감</summary>
-        private IEnumerator TurnBackToStory()
+        private async UniTask TurnBackToStoryAsync(CancellationToken _token)
         {
-            yield return FadeGroup(_ctrlGroup, 1f, 0f, 0.3f);
+            await FadeGroupAsync(_ctrlGroup, 1f, 0f, 0.3f, _token);
             _newSpread.texture = _snapRT;                                   // 밑: 이야기 펼침면
             _oldRight.texture = _bookSpread; _oldRight.gameObject.SetActive(true);   // 오른쪽은 넘어온 장이 덮을 때까지 지금 페이지
             _oldLeft.gameObject.SetActive(false);
@@ -365,7 +366,7 @@ namespace HistoryCrash.UI
             _flip.Append(DOVirtual.Float(1f, 0f, 0.425f, _k => SetFlip(_flipBack, _k, Mathf.Lerp(0.55f, 1f, _k))).SetEase(Ease.InSine));
             _flip.AppendCallback(() => { _flipBack.gameObject.SetActive(false); _flipFront.gameObject.SetActive(true); });
             _flip.Append(DOVirtual.Float(0f, 1f, 0.425f, _k => SetFlip(_flipFront, _k, Mathf.Lerp(0.55f, 1f, _k))).SetEase(Ease.OutSine));
-            yield return _flip.WaitForCompletion();
+            await WaitTween(_flip, _token);
             _oldRight.gameObject.SetActive(false); _flipFront.gameObject.SetActive(false); _flipBack.gameObject.SetActive(false);
         }
 
@@ -373,9 +374,9 @@ namespace HistoryCrash.UI
         // 튜토리얼은 빠르게 넘겨 볼 수 있게 이야기·조작법 넘김보다 짧게
         private const float QUICK_FADE_OUT = 0.15f, QUICK_FLIP_HALF = 0.28f, QUICK_FADE_IN = 0.3f;
 
-        private IEnumerator TurnBetween(CanvasGroup _from, CanvasGroup _to, bool _forward)
+        private async UniTask TurnBetweenAsync(CanvasGroup _from, CanvasGroup _to, bool _forward, CancellationToken _token)
         {
-            yield return FadeGroup(_from, 1f, 0f, QUICK_FADE_OUT);
+            await FadeGroupAsync(_from, 1f, 0f, QUICK_FADE_OUT, _token);
             _newSpread.texture = _bookSpread; _flipFront.texture = _bookSpread; _flipBack.texture = _bookSpread;
             _oldLeft.gameObject.SetActive(false); _oldRight.gameObject.SetActive(false);
             // 앞으로: 오른쪽 장이 책등 쪽으로 눕고 왼쪽에 내려앉음 / 뒤로: 반대
@@ -388,9 +389,9 @@ namespace HistoryCrash.UI
             _flip.Append(DOVirtual.Float(1f, 0f, QUICK_FLIP_HALF, _k => SetFlip(_first, _k, Mathf.Lerp(0.55f, 1f, _k))).SetEase(Ease.InSine));
             _flip.AppendCallback(() => { _first.gameObject.SetActive(false); _second.gameObject.SetActive(true); });
             _flip.Append(DOVirtual.Float(0f, 1f, QUICK_FLIP_HALF, _k => SetFlip(_second, _k, Mathf.Lerp(0.55f, 1f, _k))).SetEase(Ease.OutSine));
-            yield return _flip.WaitForCompletion();
+            await WaitTween(_flip, _token);
             _second.gameObject.SetActive(false);
-            yield return FadeGroup(_to, 0f, 1f, QUICK_FADE_IN);
+            await FadeGroupAsync(_to, 0f, 1f, QUICK_FADE_IN, _token);
         }
 
         private static void SetFlip(RawImage _img, float _scaleX, float _shade)
@@ -605,13 +606,13 @@ namespace HistoryCrash.UI
         public void GoBackPage() { if (_backGroup && _backGroup.interactable) { _bookmarkClicked = true; _choseBack = true; } }
 
         /// <summary>우측 책갈피 글씨를 바꾸고 누를 때까지 기다림(깜빡임·번짐 같은 연출 없음). 키보드 Enter·Space·→ = 다음, ← = 이전</summary>
-        private IEnumerator WaitBookmark(int _which, bool _allowBack)
+        private async UniTask WaitBookmarkAsync(int _which, bool _allowBack, CancellationToken _token)
         {
-            if (!_bookmarkGroup) yield break;
+            if (!_bookmarkGroup) return;
             if (!_bookmarkGroup.gameObject.activeSelf) ShowBookmark(true);
             ShowBack(_allowBack);
             SetNextRibbon(_which);
-            yield return null;                                             // 누른 클릭이 다음 단계로 바로 이어지지 않게 한 프레임
+            await NextFrame(_token);                                             // 누른 클릭이 다음 단계로 바로 이어지지 않게 한 프레임
             _bookmarkClicked = false; _choseBack = false;
             while (!_bookmarkClicked)
             {
@@ -619,7 +620,7 @@ namespace HistoryCrash.UI
                 if (_kb != null && (_kb.enterKey.wasPressedThisFrame || _kb.numpadEnterKey.wasPressedThisFrame || _kb.spaceKey.wasPressedThisFrame || _kb.rightArrowKey.wasPressedThisFrame)) { _choseBack = false; break; }
                 if (_allowBack && _kb != null && _kb.leftArrowKey.wasPressedThisFrame) { _choseBack = true; break; }
                 if (_kb != null && _kb.escapeKey.wasPressedThisFrame && _skipGroup && _skipGroup.interactable) { _skipTutorial = true; _choseBack = false; break; }
-                yield return null;
+                await NextFrame(_token);
             }
             _bookmarkClicked = false;
             ShowBack(false);
@@ -742,8 +743,8 @@ namespace HistoryCrash.UI
             Select(_i);
             switch (_items[_i])
             {
-                case "Continue": StartCoroutine(StartGame()); break;
-                case "Start": StartCoroutine(StartGame()); break;   // 새 게임: 저장 초기화는 세이브 시스템이 생기면 여기서
+                case "Continue": StartGameAsync(destroyCancellationToken).Forget(); break;
+                case "Start": StartGameAsync(destroyCancellationToken).Forget(); break;   // 새 게임: 저장 초기화는 세이브 시스템이 생기면 여기서
                 case "Settings": if (_settings) _settings.Open(); break;
                 case "Credits": OpenCredits(); break;
                 case "Quit":
@@ -886,16 +887,16 @@ namespace HistoryCrash.UI
             if (_cam) { _cam.clearFlags = CameraClearFlags.SolidColor; _cam.backgroundColor = Color.black; }
         }
 
-        private IEnumerator PlayClip(VideoClip _clip, bool _loop, float _fade)
+        private async UniTask PlayClipAsync(VideoClip _clip, bool _loop, float _fade, CancellationToken _token)
         {
-            if (!_clip) yield break;
+            if (!_clip) return;
             int _back = 1 - _front;
             var _p = _vp[_back];
             _p.Stop(); _p.clip = _clip; _p.isLooping = _loop;
             _p.Prepare();
-            while (!_p.isPrepared) yield return null;
+            while (!_p.isPrepared) await NextFrame(_token);
             _p.Play();
-            while (_p.frame < 1) yield return null;            // 첫 장면이 실제로 그려진 뒤 보여 줌(검은 깜빡임 방지)
+            while (_p.frame < 1) await NextFrame(_token);            // 첫 장면이 실제로 그려진 뒤 보여 줌(검은 깜빡임 방지)
             if ((_clip == _introKo || _clip == _introEn) && _storyLoop && !_loopSrc.isPlaying)
             {
                 _loopSrc.clip = _storyLoop; _loopSrc.time = 0f; _loopSrc.volume = MusicVolume(); _loopSrc.Play();
@@ -913,18 +914,18 @@ namespace HistoryCrash.UI
             _vimg[_back].material = _clip == _introKo || _clip == _introEn ? Parchment() : null;
             _vimg[_back].transform.SetAsLastSibling();
             int _old = _front; _front = _back;
-            if (_fade > 0f) yield return Fade(_vimg[_back], 0f, 1f, _fade, true);
+            if (_fade > 0f) await FadeAsync(_vimg[_back], 0f, 1f, _fade, _token, true);
             else SetAlpha(_vimg[_back], 1f);
             _vp[_old].Stop(); SetAlpha(_vimg[_old], 0f);
         }
 
-        private IEnumerator WaitClipEnd()
+        private async UniTask WaitClipEndAsync(CancellationToken _token)
         {
             var _p = _vp[_front];
             bool _done = false;
             VideoPlayer.EventHandler _h = _ => _done = true;
             _p.loopPointReached += _h;
-            while (!_done && (_p.isPlaying || _p.frame < 2)) yield return null;
+            while (!_done && (_p.isPlaying || _p.frame < 2)) await NextFrame(_token);
             _p.loopPointReached -= _h;
         }
 
@@ -1014,9 +1015,9 @@ namespace HistoryCrash.UI
         private static bool _logoShown;
         private RectTransform _uiRoot;
 
-        private IEnumerator PlayLogo()
+        private async UniTask PlayLogoAsync(CancellationToken _token)
         {
-            if (!_logoClip || _logoShown) yield break;
+            if (!_logoClip || _logoShown) return;
             _logoShown = true;
 
             var _rtLogo = new RenderTexture((int)_logoClip.width, (int)_logoClip.height, 0) { name = "MainMenuLogo" };
@@ -1038,12 +1039,12 @@ namespace HistoryCrash.UI
             _p.EnableAudioTrack(0, true); _p.SetTargetAudioSource(0, _src);
             bool _ended = false; _p.loopPointReached += _ => _ended = true;
             _p.Prepare();
-            for (float _t = 0f; !_p.isPrepared && _t < 5f; _t += Time.unscaledDeltaTime) yield return null;   // 준비가 안 되면 5초 뒤 포기
+            for (float _t = 0f; !_p.isPrepared && _t < 5f; _t += Time.unscaledDeltaTime) await NextFrame(_token);   // 준비가 안 되면 5초 뒤 포기
             if (_p.isPrepared)
             {
                 _src.volume = MusicVolume();
                 _p.Play();
-                while (_p.frame < 1 && !_ended) yield return null;   // 첫 장면이 그려진 뒤 보여 줌
+                while (_p.frame < 1 && !_ended) await NextFrame(_token);   // 첫 장면이 그려진 뒤 보여 줌
                 SetAlpha(_img, 1f);
                 float _start = Time.unscaledTime;
                 while (!_ended)
@@ -1054,14 +1055,14 @@ namespace HistoryCrash.UI
                                      || (_ms != null && _ms.leftButton.wasPressedThisFrame));
                     if (_skip) break;
                     _src.volume = MusicVolume();   // 재생 중 볼륨 변경 반영
-                    yield return null;
+                    await NextFrame(_token);
                 }
                 // 화면과 소리가 함께 잦아듦
-                yield return DOVirtual.Float(1f, 0f, LOGO_FADE, _k =>
+                await WaitTween(DOVirtual.Float(1f, 0f, LOGO_FADE, _k =>
                 {
                     SetAlpha(_img, _k);
                     _src.volume = MusicVolume() * _k;
-                }).SetEase(Ease.InOutSine).SetUpdate(true).SetLink(_go).WaitForCompletion();
+                }).SetEase(Ease.InOutSine).SetUpdate(true).SetLink(_go), _token);
             }
             _p.Stop();
             Destroy(_go);
@@ -1126,17 +1127,26 @@ namespace HistoryCrash.UI
         private static void Stretch(RectTransform _r) { _r.anchorMin = Vector2.zero; _r.anchorMax = Vector2.one; _r.offsetMin = _r.offsetMax = Vector2.zero; }
         private static void SetAlpha(Graphic _g, float _a) { var _c = _g.color; _c.a = _a; _g.color = _c; }
 
-        // 페이드는 DOTween(게임이 멈춰도 흐르는 시간). 흐름(영상 준비·입력 기다리기)은 코루틴이 트윈 끝을 기다림
-        private static IEnumerator Fade(Graphic _g, float _a0, float _a1, float _dur, bool _smooth = true)
+        // 페이드는 DOTween(게임이 멈춰도 흐르는 시간). 흐름(영상 준비·입력 기다리기)은 UniTask가 트윈 끝을 기다림
+        // 취소(메인메뉴 파괴)되면 OperationCanceledException으로 흐름 전체가 멈춤. 시작점의 Forget()이 이 예외는 조용히 넘김
+
+        // 다음 프레임까지 대기. LastUpdate = 모든 Update 뒤라 코루틴(yield return null)과 같은 순서(Update의 입력 확인이 먼저)
+        private static UniTask NextFrame(CancellationToken _token) => UniTask.Yield(PlayerLoopTiming.LastUpdate, _token);
+
+        // 트윈이 끝나거나 Kill될 때까지 대기(WaitForCompletion 대신)
+        private static UniTask WaitTween(Tween _tween, CancellationToken _token)
+            => UniTask.WaitWhile(() => _tween.IsActive() && !_tween.IsComplete(), PlayerLoopTiming.LastUpdate, _token);
+
+        private static async UniTask FadeAsync(Graphic _g, float _a0, float _a1, float _dur, CancellationToken _token, bool _smooth = true)
         {
             SetAlpha(_g, _a0);
-            yield return _g.DOFade(_a1, _dur).SetEase(_smooth ? Ease.InOutSine : Ease.Linear).SetUpdate(true).SetLink(_g.gameObject).WaitForCompletion();
+            await WaitTween(_g.DOFade(_a1, _dur).SetEase(_smooth ? Ease.InOutSine : Ease.Linear).SetUpdate(true).SetLink(_g.gameObject), _token);
         }
 
-        private static IEnumerator FadeGroup(CanvasGroup _g, float _a0, float _a1, float _dur)
+        private static async UniTask FadeGroupAsync(CanvasGroup _g, float _a0, float _a1, float _dur, CancellationToken _token)
         {
             _g.alpha = _a0;
-            yield return _g.DOFade(_a1, _dur).SetEase(Ease.Linear).SetUpdate(true).SetLink(_g.gameObject).WaitForCompletion();
+            await WaitTween(_g.DOFade(_a1, _dur).SetEase(Ease.Linear).SetUpdate(true).SetLink(_g.gameObject), _token);
         }
 
         private static void EnsureEventSystem()
