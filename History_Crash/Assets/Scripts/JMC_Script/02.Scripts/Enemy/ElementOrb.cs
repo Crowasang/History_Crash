@@ -60,7 +60,8 @@ namespace HistoryCrash.Enemy
             _pivot.SetParent(_parent, false);
             var _go = GameObject.CreatePrimitive(PrimitiveType.Quad);
             _go.name = "Quad";
-            Object.Destroy(_go.GetComponent<Collider>());
+            // 바로 지움: Destroy는 프레임 끝에 지워져서, 그 사이 플레이어(Rigidbody) 밑에 붙으면 오목 메시 콜라이더 에러가 남
+            Object.DestroyImmediate(_go.GetComponent<Collider>());
             _go.transform.SetParent(_pivot, false);
             _go.transform.localScale = Vector3.one * _size;
             var _r = _go.GetComponent<MeshRenderer>();
