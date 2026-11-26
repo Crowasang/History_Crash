@@ -152,6 +152,13 @@ namespace HistoryCrash.Combat
             return !_grid.InBounds(_c) || !_grid.IsWalkable(_c);
         }
 
+        // 벽 칸 가장자리(열린 칸에서 반 칸 안)는 벽면 앞 빈 곳이라 지나감. 벽을 따라 쏠 때 벽 칸을 스쳐 멈추던 문제
+        private bool WallDeep(Vector3 _p)
+        {
+            float _m = _grid != null ? _grid.TileSize * 0.45f : 0.45f;
+            return Wall(_p) && Wall(_p + Vector3.right * _m) && Wall(_p - Vector3.right * _m) && Wall(_p + Vector3.forward * _m) && Wall(_p - Vector3.forward * _m);
+        }
+
         // 떠 있는 자리(좌우·뒤)가 벽 칸 안이거나 바로 앞(탄이 벽 판정을 시작하는 거리)이 벽이면 플레이어 쪽으로 당김.
         // 벽에 붙어 쏘면 옆 자리에서 출발한 탄이 0.6 m 만에 벽에 막히던 문제. 플레이어 정면이 막혔으면 그건 원래대로 막힘
         private Vector3 OutOfWall(Vector3 _p, Vector3 _f)
@@ -308,6 +315,8 @@ namespace HistoryCrash.Combat
             var _trail = ElementFx.Trail(_element, _holder, Mathf.Min(_size * 0.4f, 0.2f), 45f);
             float _traveled = 0f;
             bool _stop = false;
+            // 벽 가에는 플레이어가 들어설 수 있는 막힌 칸이 있음(최대 2.3 m). 플레이어가 그 안에서 쏘면 처음 3 m는 벽 판정 안 함
+            float _wallFrom = _player && Wall(_player.position) ? 3f : 0.6f;
             while (_traveled < _range && !_stop)
             {
                 // 프레임이 튀어 한 번에 많이 이동해도 머미를 건너뛰지 않도록 판정 반경 이하 간격으로 나눠 이동·판정
@@ -320,7 +329,7 @@ namespace HistoryCrash.Combat
                     if (!float.IsNaN(_dropToY)) { var _hp = _holder.position; _hp.y = Mathf.Lerp(_startY, _dropToY, Mathf.SmoothStep(0f, 1f, _traveled / 1.5f)); _holder.position = _hp; }
                     int _n = HitAround(_holder.position + _d * _hitAhead, _hitR, _d) + (_hitAhead > 0f ? HitAround(_holder.position, _hitR, _d) : 0);   // 긴 탄은 끝과 몸통 둘 다 판정
                     if (_n > 0 && !_pierce) _stop = true;
-                    else if (_traveled > 0.6f && Wall(_holder.position)) _stop = true;
+                    else if (_traveled > _wallFrom && WallDeep(_holder.position)) _stop = true;
                 }
                 if (_spin != 0f) _shape.Rotate(Vector3.forward, _spin * Time.deltaTime, Space.Self);
                 if (!_stop) yield return null;
