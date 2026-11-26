@@ -1,5 +1,6 @@
-using System.Collections;
 using System.Collections.Generic;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using HistoryCrash.Boss;
 using HistoryCrash.Player;
 using HistoryCrash.UI;
@@ -88,26 +89,32 @@ namespace HistoryCrash.Cutscene
         {
             if (_started || !Cleared()) return;
             _started = true;
-            StartCoroutine(Run());
+            RunAsync(destroyCancellationToken).Forget();
         }
 
         private float Frame => (Time.unscaledTime - _t0) * FPS;
 
-        private IEnumerator Run()
+        // 다음 프레임까지 대기. LastUpdate = 모든 Update 뒤라 코루틴(yield return null)과 같은 순서. 취소되면 true
+        private static UniTask<bool> NextFrame(CancellationToken _token)
+        {
+            return UniTask.Yield(PlayerLoopTiming.LastUpdate, _token).SuppressCancellationThrow();
+        }
+
+        private async UniTaskVoid RunAsync(CancellationToken _token)
         {
             PauseSettingsUI.InputBlocked = true;
             bool _ok = true;
             try { Setup(); } catch (System.Exception _e) { Debug.LogException(_e, this); _ok = false; }
-            if (!_ok) { Restore(); if (_canvasGo) Destroy(_canvasGo); yield break; }   // 실패하면 팀 클리어 화면이 그대로 보이게
-            yield return null;   // 신전을 만드느라 길어진 프레임은 세지 않음
+            if (!_ok) { Restore(); if (_canvasGo) Destroy(_canvasGo); return; }   // 실패하면 팀 클리어 화면이 그대로 보이게
+            if (await NextFrame(_token)) return;   // 신전을 만드느라 길어진 프레임은 세지 않음
             _t0 = Time.unscaledTime;
             if (_mix.clip) _mix.Play();
             while (!_leaving)
             {
                 try { Apply(Frame); }
-                catch (System.Exception _e) { Debug.LogException(_e, this); Restore(); if (_canvasGo) Destroy(_canvasGo); if (_mix) _mix.Stop(); yield break; }
+                catch (System.Exception _e) { Debug.LogException(_e, this); Restore(); if (_canvasGo) Destroy(_canvasGo); if (_mix) _mix.Stop(); return; }
                 if (Frame - PRE >= MENU_READY) Menu();
-                yield return null;
+                if (await NextFrame(_token)) return;
             }
         }
 
@@ -338,16 +345,16 @@ namespace HistoryCrash.Cutscene
         }
 
         // 0 = Main Menu, 1 = Retry
-        private void Choose(int _i) { if (_leaving) return; _sel = _i; _leaving = true; StartCoroutine(Leave(_i == 1)); }
+        private void Choose(int _i) { if (_leaving) return; _sel = _i; _leaving = true; LeaveAsync(_i == 1, destroyCancellationToken).Forget(); }
 
-        private IEnumerator Leave(bool _retry)
+        private async UniTaskVoid LeaveAsync(bool _retry, CancellationToken _token)
         {
             StageBgm.FadeOut(0.6f);
             float _t = Time.unscaledTime;
             while (_out > 0f)
             {
                 _out = 1f - Mathf.Clamp01((Time.unscaledTime - _t) / 0.7f);
-                Apply(Frame); _black.color = new Color(0f, 0f, 0f, 1f - _out); yield return null;
+                Apply(Frame); _black.color = new Color(0f, 0f, 0f, 1f - _out); if (await NextFrame(_token)) return;
             }
             _mix.Stop(); Cursor.visible = false;
 
@@ -360,12 +367,12 @@ namespace HistoryCrash.Cutscene
 #if UNITY_EDITOR
             else _op = UnityEditor.SceneManagement.EditorSceneManager.LoadSceneAsyncInPlayMode(_path, new LoadSceneParameters(LoadSceneMode.Single));
 #endif
-            if (_op == null) { Debug.LogError("[ClearCutscene] 씬을 열 수 없음: " + _name); BossIntroCutscene.SkipNext = false; Destroy(gameObject); yield break; }
-            while (!_op.isDone) yield return null;
+            if (_op == null) { Debug.LogError("[ClearCutscene] 씬을 열 수 없음: " + _name); BossIntroCutscene.SkipNext = false; Destroy(gameObject); return; }
+            while (!_op.isDone) if (await NextFrame(_token)) return;
             foreach (Transform _c in _canvasGo.transform) if (_c != _black.transform) Destroy(_c.gameObject);
-            yield return null;
+            if (await NextFrame(_token)) return;
             _t = Time.unscaledTime; float _a = 1f;
-            while (_a > 0f) { _a = 1f - Mathf.Clamp01((Time.unscaledTime - _t) / 0.6f); _black.color = new Color(0f, 0f, 0f, _a); yield return null; }
+            while (_a > 0f) { _a = 1f - Mathf.Clamp01((Time.unscaledTime - _t) / 0.6f); _black.color = new Color(0f, 0f, 0f, _a); if (await NextFrame(_token)) return; }
             Destroy(gameObject);
         }
 
