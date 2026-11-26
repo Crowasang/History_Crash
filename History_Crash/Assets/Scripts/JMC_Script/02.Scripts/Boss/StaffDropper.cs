@@ -78,6 +78,8 @@ namespace HistoryCrash.Boss
         public void Drop(int _pattern, Vector3 _world, Transform _iconSource)
         {
             if (_grid == null) return;
+            // 패턴에 맞아 죽는 순간 게임이 끝나 이 오브젝트가 꺼지면(ActiveOnlyWhilePlaying) 코루틴을 시작할 수 없어 에러가 남 → 떨어뜨리지 않음
+            if (!isActiveAndEnabled) return;
             var _cell = FreeCell(_grid.WorldToCell(_world));
             Vector3 _center = _grid.CellCenter(_cell, _grid.FloorTopY);
 
