@@ -543,6 +543,9 @@ namespace HistoryCrash.UI
         {
             if (_koTried) return _koFont;
             _koTried = true;
+            // 게임에 넣은 한글 폰트(송명, OFL) 먼저. 없으면(아트 파일을 아직 안 받은 PC) 컴퓨터의 한글 글꼴로
+            _koFont = Resources.Load<TMP_FontAsset>(TEX + "Font/SongMyung_Regular_SDF");
+            if (_koFont) return _koFont;
             string[,] _cands = { { "Malgun Gothic", "Bold" }, { "Malgun Gothic", "Regular" }, { "Apple SD Gothic Neo", "Bold" }, { "Noto Sans CJK KR", "Bold" } };
             for (int i = 0; i < _cands.GetLength(0) && _koFont == null; i++)
             {
