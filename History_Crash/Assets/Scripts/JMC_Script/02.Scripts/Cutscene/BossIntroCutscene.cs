@@ -34,6 +34,13 @@ namespace HistoryCrash.Cutscene
 
         private const string RES = "Cutscene/BossIntro/";
         private const float FPS = 24f, TOTAL = 408f, LB = 70f;
+        // 설정 언어가 영어면 이름 끝 _EN 그림(없으면 한국어 그림)
+        private static Texture2D LoadLang(string _path)
+        {
+            if (!HistoryCrash.UI.GameLanguage.IsKorean) { var _en = Resources.Load<Texture2D>(_path + "_EN"); if (_en) return _en; }
+            return Resources.Load<Texture2D>(_path);
+        }
+
         private static readonly Rect CARD_RECT = new Rect(1060f, 120f, 540f, 326f);   // 1920x1080 기준, 왼쪽 위 원점
         private static readonly Color GREEN = new Color(0.35f, 1f, 0.4f);
         private const float SKIP_GUARD = 0.3f;   // 시작 직후 남아 있던 키 입력으로 바로 넘어가지 않게(초)
@@ -275,7 +282,7 @@ namespace HistoryCrash.Cutscene
             _cards = new RawImage[3];
             for (int i = 0; i < 3; i++)
             {
-                var _r = NewGraphic<RawImage>(_n[i], _root); _r.texture = Resources.Load<Texture2D>(RES + _n[i]);
+                var _r = NewGraphic<RawImage>(_n[i], _root); _r.texture = LoadLang(RES + _n[i]);
                 var _rt = _r.rectTransform; _rt.anchorMin = _rt.anchorMax = new Vector2(0f, 1f); _rt.pivot = new Vector2(0f, 1f);
                 _rt.anchoredPosition = new Vector2(CARD_RECT.x, -CARD_RECT.y); _rt.sizeDelta = CARD_RECT.size;   // 화면 비율이 16:9가 아니면 왼쪽 위 기준
                 _r.color = new Color(1f, 1f, 1f, 0f);
