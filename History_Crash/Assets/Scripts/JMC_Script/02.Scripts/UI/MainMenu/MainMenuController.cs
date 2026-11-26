@@ -70,17 +70,17 @@ namespace HistoryCrash.UI
         [SerializeField] private MainMenuTutorialPage[] _tutorialPages =
         {
             new MainMenuTutorialPage("UI/Tutorial/01_BossAttack", "파라오의 공격", "The Pharaoh's Attacks",
-                "파라오는 제단 위에서 다섯 가지\n패턴을 번갈아 쓰며 공격합니다.\n\n바닥에 문양이나 균열이 나타나면\n곧 공격이 떨어지는 자리입니다.\n달리거나 점프해서 피하세요.",
-                "The Pharaoh stands on the altar and attacks with five patterns in turn.\n\nA glowing mark or crack on the floor shows where an attack will land. Run or jump to dodge it."),
+                "파라오는 제단 위에서 다섯 가지\n패턴을 번갈아 쓰며 공격합니다.\n\n바닥에 초록빛 길이나 균열이\n나타나면 곧 공격이 떨어집니다.\n표시가 사라지기 전에 달리거나\n점프해서 벗어나세요.",
+                "The Pharaoh stands on the altar and attacks with five patterns in turn.\n\nWhen a green path or crack glows on the floor, an attack is about to land there. Run or jump out before the mark fades."),
             new MainMenuTutorialPage("UI/Tutorial/02_DroppedWeapon", "떨어진 무기", "Dropped Weapons",
-                "패턴이 끝날 무렵, 그 패턴의 무기가\n하늘에서 떨어져 바닥에 놓입니다.\n\n무기를 주우면 파라오의 공격을\n약하지만 따라 쓸 수 있습니다.\n무기는 잠시 뒤 사라집니다.",
-                "Near the end of each pattern, that pattern's weapon falls from the sky onto the floor.\n\nPick it up to use a weaker version of the Pharaoh's attack. Weapons vanish after a while."),
+                "패턴이 끝날 무렵, 그 패턴의 무기가\n빛줄기와 함께 바닥에 떨어집니다.\n\n무기를 주우면 파라오의 공격을\n약하게 따라 쓸 수 있습니다.\n무기는 10초쯤 뒤 사라지니\n서둘러 주우세요.",
+                "Near the end of each pattern, that pattern's weapon falls to the floor in a beam of light.\n\nPick it up to use a weaker version of the Pharaoh's attack. Weapons vanish after about 10 seconds, so be quick."),
             new MainMenuTutorialPage("UI/Tutorial/03_ElementOrb", "속성 오브", "Element Orbs",
-                "미라는 불 · 물 · 전기 중\n한 속성을 지니고, 같은 속성의\n오브를 떨어뜨립니다.\n\n주운 오브는 무기에 끼워지고,\n무기와 오브가 모두 있어야\n공격할 수 있습니다.\n한 번 공격하면 둘 다 사라집니다.",
-                "Each mummy has one element (Fire, Water or Electric) and drops orbs of that element.\n\nAn orb you pick up is set in your weapon. You need both a weapon and an orb to attack, and both are used up after one attack."),
+                "미라는 불 · 물 · 전기 중\n한 속성을 지니고, 걸으면서\n같은 속성의 오브를 떨어뜨립니다.\n오브는 5초 뒤 사라집니다.\n\n주운 오브는 무기에 끼워집니다.\n무기와 오브가 모두 있어야\n공격할 수 있고, 한 번 공격하면\n둘 다 사라집니다.",
+                "Each mummy has one element (Fire, Water or Electric) and drops orbs of that element as it walks. Orbs vanish after 5 seconds.\n\nAn orb you pick up is set in your weapon. You need both a weapon and an orb to attack, and both are used up after one attack."),
             new MainMenuTutorialPage("UI/Tutorial/04_ElementMummy", "속성 미라", "Element Mummies",
-                "미라의 몸과 머리 위 구슬의 색이\n그 미라의 속성입니다.\n\n오브와 같은 속성의 미라만\n쓰러뜨릴 수 있습니다.\n\n쓰러진 미라의 영혼이 파라오에게\n날아가 피해를 주고, 체력을 모두\n깎으면 피라미드가 정화됩니다.",
-                "The color of a mummy's body and the orb above its head shows its element.\n\nYou can only defeat mummies of the same element as your orb.\n\nEach defeated mummy's soul flies to the Pharaoh and deals damage. Bring its HP to zero to purify the pyramid."),
+                "미라 몸을 감싼 테두리 색이\n그 미라의 속성입니다.\n\n오브와 같은 속성의 미라만\n쓰러뜨릴 수 있습니다.\n\n쓰러진 미라의 영혼이 파라오에게\n날아가 피해를 주고, 체력을 모두\n깎으면 신전이 정화됩니다.",
+                "The glowing outline around a mummy shows its element.\n\nYou can only defeat mummies of the same element as your orb.\n\nEach defeated mummy's soul flies to the Pharaoh and deals damage. Bring its HP to zero to purify the temple."),
         };
 
         [Header("크레딧(메뉴 Credits: 아래에서 위로 올라감, Esc로 닫기, 클릭·Space를 누르고 있으면 빨리 넘김)")]
