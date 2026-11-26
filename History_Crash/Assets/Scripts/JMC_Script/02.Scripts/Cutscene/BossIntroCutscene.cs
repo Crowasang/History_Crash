@@ -1,5 +1,6 @@
-using System.Collections;
 using System.Collections.Generic;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using HistoryCrash.Boss;
 using HistoryCrash.CameraRig;
 using HistoryCrash.UI;
@@ -84,22 +85,29 @@ namespace HistoryCrash.Cutscene
         private readonly List<(CanvasGroup g, float a, bool added, bool boss)> _hud = new List<(CanvasGroup, float, bool, bool)>();
         private AudioSource _audio;
 
-        private IEnumerator Start()
+        private void Start()
         {
             PauseSettingsUI.InputBlocked = true;                                   // 메인메뉴 전환 중에도 이미 막혀 있음
-            yield return null; yield return null;
-            while (FindFirstObjectByType<BookToGameTransition>()) yield return null;   // 책이 다 내려앉을 때까지
+            PlayAsync(destroyCancellationToken).Forget();
+        }
+
+        // 매 프레임 대기는 LastUpdate(모든 Update 뒤): 코루틴과 같은 순서라 설정창의 Esc 확인(Update)이 먼저 돈다
+        private async UniTaskVoid PlayAsync(CancellationToken _token)
+        {
+            if (await UniTask.DelayFrame(2, PlayerLoopTiming.LastUpdate, _token).SuppressCancellationThrow()) return;
+            if (await UniTask.WaitWhile(() => FindFirstObjectByType<BookToGameTransition>() != null,PlayerLoopTiming.LastUpdate, _token)
+                .SuppressCancellationThrow()) return;   // 책이 다 내려앉을 때까지
             // 중간에 오류가 나도 게임이 멈춘 채로 남지 않게 항상 Finish로 되돌림
             bool _ok = false;
             try { _ok = Setup(); } catch (System.Exception _e) { Debug.LogException(_e, this); }
-            if (!_ok) { Finish(); yield break; }
+            if (!_ok) { Finish(); return; }
             float _t0 = Time.unscaledTime;
             if (_audio && _audio.clip) _audio.Play();
             float _f = 0f;
             while (_f < TOTAL)
             {
                 // Esc로 건너뛰기: 남은 연출 없이 바로 게임으로(소리도 끊음).
-                // 설정창의 Esc 확인(Update)이 이 코루틴보다 먼저 돌기 때문에, 같은 입력으로 설정창이 열리지 않음
+                // 설정창의 Esc 확인(Update)이 이 대기(LastUpdate)보다 먼저 돌기 때문에, 같은 입력으로 설정창이 열리지 않음
                 var _kb = Keyboard.current;
                 if (_kb != null && _kb.escapeKey.wasPressedThisFrame && Time.unscaledTime - _t0 > SKIP_GUARD)
                 {
@@ -110,7 +118,7 @@ namespace HistoryCrash.Cutscene
                 if (_audio && _audio.isPlaying) _f = Mathf.Max(_f, _audio.time * FPS);   // 소리와 어긋나지 않게
                 try { Apply(Mathf.Min(_f, TOTAL - 1f)); }
                 catch (System.Exception _e) { Debug.LogException(_e, this); if (_audio) _audio.Stop(); break; }
-                yield return null;
+                if (await UniTask.Yield(PlayerLoopTiming.LastUpdate, _token).SuppressCancellationThrow()) return;
             }
             Finish();
         }
