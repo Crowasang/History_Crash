@@ -1,4 +1,5 @@
-using System.Collections;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Serialization;
 using HistoryCrash.Boss;
@@ -86,7 +87,14 @@ namespace HistoryCrash.Enemy
         public static System.Collections.Generic.List<Mummy> Alive => _alive;
 
         private void OnEnable() { _alive.Add(this); }
-        private void OnDisable() { _alive.Remove(this); }
+        private void OnDisable()
+        {
+            _alive.Remove(this);
+            // 게임이 끝나 소환기와 함께 꺼지면 죽는 연출도 코루틴처럼 멈춘다
+            if (_dieCts != null) { _dieCts.Cancel(); _dieCts.Dispose(); _dieCts = null; }
+        }
+
+        private CancellationTokenSource _dieCts;
 
         public void Init(MummyGender _g, Element _e)
         {
@@ -226,12 +234,14 @@ namespace HistoryCrash.Enemy
         public bool TryHit(Element _attack, Vector3 _travelDir)
         {
             if (!IsAlive || !Active || _attack != _element) return false;
+            if (!isActiveAndEnabled) return false;   // 게임이 끝나 꺼진 머미는 맞지 않음
             IsAlive = false;
-            StartCoroutine(Die(_travelDir));
+            _dieCts = CancellationTokenSource.CreateLinkedTokenSource(destroyCancellationToken);
+            DieAsync(_travelDir, _dieCts.Token).Forget();
             return true;
         }
 
-        private IEnumerator Die(Vector3 _travelDir)
+        private async UniTaskVoid DieAsync(Vector3 _travelDir, CancellationToken _token)
         {
             _travelDir.y = 0;
             HistoryCrash.Sound.GameSfx.FadeOut(_walkSfx, 0.15f);
@@ -242,7 +252,7 @@ namespace HistoryCrash.Enemy
             ElementFx.Burst(_element, transform.position + Vector3.up * 0.6f, 1.2f, 30);
             if (_animator) { _animator.speed = _deathAnimSpeed; _animator.CrossFadeInFixedTime(_state, 0.08f); }
             Debug.Log("[Mummy] " + _gender + " " + ElementInfo.Name(_element) + " hit from " + (_fromBehind ? "behind → Dying" : "front → Death"));
-            yield return new WaitForSeconds(_deathHold);
+            if (await UniTask.Delay(System.TimeSpan.FromSeconds(_deathHold), cancellationToken: _token).SuppressCancellationThrow()) return;
 
             // 1) 쓰러진 시신 위에 속성 구슬이 생기고, 시신이 손발 끝부터 조각나 빨려 들며 구슬이 커짐
             if (_animator) _animator.speed = 0f;   // 쓰러진 자세 그대로 멈춤
@@ -279,11 +289,15 @@ namespace HistoryCrash.Enemy
                 _core.transform.localScale = Vector3.one * CORE_SIZE * Mathf.Min(1f, _t / 0.1f) * Mathf.Lerp(0.35f, 1f, Mathf.SmoothStep(0f, 1f, _u));
                 _light.intensity = Mathf.Lerp(0.8f, 2.5f, _u);
                 PullParticles(_stream, _soulPos, _u);
-                yield return null;
+                if (await UniTask.Yield(_token).SuppressCancellationThrow()) return;
             }
 
             // 2) 다 삼킨 구슬이 잠깐 떠 있음(움찔·번쩍 없음)
-            for (float _t = 0; _t < _soulPulseTime; _t += Time.deltaTime) { PullParticles(_stream, _soulPos, 1f); yield return null; }
+            for (float _t = 0; _t < _soulPulseTime; _t += Time.deltaTime)
+            {
+                PullParticles(_stream, _soulPos, 1f);
+                if (await UniTask.Yield(_token).SuppressCancellationThrow()) return;
+            }
             Destroy(_stream.gameObject);
 
             // 3) 파라오에게 날아감
@@ -298,7 +312,7 @@ namespace HistoryCrash.Enemy
                 if (_pharaoh) _target = PharaohCenter();
                 Vector3 _q = Vector3.Lerp(Vector3.Lerp(_b, _mid, _u), Vector3.Lerp(_mid, _target, _u), _u);
                 _spirit.transform.position = _q;
-                yield return null;
+                if (await UniTask.Yield(_token).SuppressCancellationThrow()) return;
             }
             ElementFx.Burst(_element, _target, 1.6f, 40);
             HistoryCrash.Sound.GameSfx.Play("Mummy_SoulHit", _target);
