@@ -446,7 +446,8 @@ namespace HistoryCrash.Cutscene
             _timeG = _tr.gameObject.AddComponent<CanvasGroup>(); _timeG.alpha = 0f;
             Tex("Line", _tr, "Clear_TimeLine", 1200, 798, 270, 4);
             int _s = Mathf.FloorToInt(_elapsed); string _time = (_s / 60).ToString("00") + ":" + (_s % 60).ToString("00");
-            const float DW = 10.45f, CW = 6.2f, LW = 170.4f;
+            bool _en = !HistoryCrash.UI.GameLanguage.IsKorean;   // 글자 폭(숫자·콜론·앞글 "정화까지 걸린 시간  "): 송명 / EB Garamond 실측
+            float DW = _en ? 10.05f : 9.37f, CW = _en ? 5.09f : 5.7f, LW = _en ? 128.6f : 150.9f;
             float _w = LW; foreach (char ch in _time) _w += ch == ':' ? CW : DW;
             float _x = 1335f - _w / 2f;
             Tex("Label", _tr, "Clear_TimeLabel", _x - 2f, 812, 200, 40);
@@ -478,10 +479,17 @@ namespace HistoryCrash.Cutscene
             _black = NewGraphic<Image>("Black", _root); Stretch(_black.rectTransform); _black.color = Color.clear;
         }
 
+        // 설정 언어가 영어면 이름 끝 _EN 그림(없으면 한국어 그림)
+        private static Texture2D LoadLang(string _path)
+        {
+            if (!HistoryCrash.UI.GameLanguage.IsKorean) { var _en = Resources.Load<Texture2D>(_path + "_EN"); if (_en) return _en; }
+            return Resources.Load<Texture2D>(_path);
+        }
+
         // 도감 펼침면 위 그림: 1920x1080 기준 왼쪽 위 원점
         private static RawImage Tex(string _name, RectTransform _parent, string _tex, float x, float y, float w, float h)
         {
-            var _r = NewGraphic<RawImage>(_name, _parent); if (_tex != null) _r.texture = Resources.Load<Texture2D>(RES + _tex);
+            var _r = NewGraphic<RawImage>(_name, _parent); if (_tex != null) _r.texture = LoadLang(RES + _tex);
             var _rt = _r.rectTransform; Center(_rt); _rt.sizeDelta = new Vector2(w, h); _rt.anchoredPosition = new Vector2(x + w / 2f - 960f, 540f - y - h / 2f);
             return _r;
         }
