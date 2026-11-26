@@ -152,6 +152,15 @@ namespace HistoryCrash.Combat
             return !_grid.InBounds(_c) || !_grid.IsWalkable(_c);
         }
 
+        // 떠 있는 자리(좌우·뒤)가 벽 칸 안이거나 바로 앞(탄이 벽 판정을 시작하는 거리)이 벽이면 플레이어 쪽으로 당김.
+        // 벽에 붙어 쏘면 옆 자리에서 출발한 탄이 0.6 m 만에 벽에 막히던 문제. 플레이어 정면이 막혔으면 그건 원래대로 막힘
+        private Vector3 OutOfWall(Vector3 _p, Vector3 _f)
+        {
+            Vector3 _c = _player.position; _c.y = _p.y;
+            for (int _i = 0; _i < 8 && (Wall(_p) || Wall(_p + _f * 0.8f)); _i++) _p = Vector3.Lerp(_p, _c, 0.35f);
+            return Wall(_p) || Wall(_p + _f * 0.8f) ? _c : _p;
+        }
+
         private float FloorY { get { return _grid != null ? _grid.FloorTopY : _player.position.y - 0.3f; } }
 
         private void Finish(ParticleSystem _trail = null)
@@ -258,7 +267,7 @@ namespace HistoryCrash.Combat
                     }
                     float _u = Mathf.Clamp01(_ti / C_RISE);
                     float _e = 1f - (1f - _u) * (1f - _u) * (1f - _u);                  // 빠르게 튀어나와 감속
-                    Vector3 _slot = _player.position + _rot * _c_Slots[_i];
+                    Vector3 _slot = OutOfWall(_player.position + _rot * _c_Slots[_i], _f);
                     Vector3 _bob = Vector3.up * Mathf.Sin((_t + _i) * 6f) * 0.04f * _u;  // 떠 있는 흔들림
                     _gems[_i].position = Vector3.LerpUnclamped(_chest, _slot, _e) + _bob;
                     _gems[_i].rotation = _rot;
@@ -474,7 +483,7 @@ namespace HistoryCrash.Combat
                 Vector3 _cross = _player.position + _f * E_CROSS_DIST;   // 좌우 창이 겨냥하는 교차점
                 for (int _i = _fired; _i < _count; _i++)
                 {
-                    Vector3 _slot = _player.position + _rot * _e_Slots[_i];
+                    Vector3 _slot = OutOfWall(_player.position + _rot * _e_Slots[_i], _f);
                     Vector3 _aim = Vector3.ProjectOnPlane(_cross - _slot, Vector3.up).normalized;   // 안쪽으로 살짝 꺾인 방향
                     float _hold = E_HOLD + _i * E_GAP;   // 뒤에 쏘는 창은 그만큼 더 오래 당김
                     float _pull = _t > E_RISE ? Mathf.SmoothStep(0f, 1f, (_t - E_RISE) / _hold) * E_PULL : 0f;   // 사출 직전 뒤로 당김
