@@ -1,5 +1,6 @@
-using System.Collections;
 using System.Collections.Generic;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using HistoryCrash.Player;
 using HistoryCrash.UI;
 using TMPro;
@@ -76,25 +77,31 @@ namespace HistoryCrash.Cutscene
         {
             if (_started || !PlayerDead()) return;
             _started = true;
-            StartCoroutine(Run());
+            RunAsync(destroyCancellationToken).Forget();
         }
 
-        private IEnumerator Run()
+        private async UniTaskVoid RunAsync(CancellationToken _token)
         {
             PauseSettingsUI.InputBlocked = true;
             bool _ok = true;
             try { Setup(); } catch (System.Exception _e) { Debug.LogException(_e, this); _ok = false; }
-            if (!_ok) { Restore(); if (_canvasGo) Destroy(_canvasGo); yield break; }   // 실패하면 팀 실패 화면이 그대로 보이게
+            if (!_ok) { Restore(); if (_canvasGo) Destroy(_canvasGo); return; }   // 실패하면 팀 실패 화면이 그대로 보이게
             _t0 = Time.unscaledTime;
             if (_mix.clip) _mix.Play();
             while (!_leaving)
             {
                 Apply(Frame);
                 if (Frame >= MENU_READY) Menu();
-                yield return null;
+                if (await NextFrame(_token)) return;
             }
         }
         private float Frame => (Time.unscaledTime - _t0) * FPS;
+
+        // 다음 프레임까지 대기. LastUpdate = 모든 Update 뒤라 코루틴(yield return null)과 같은 순서. 취소되면 true
+        private static UniTask<bool> NextFrame(CancellationToken _token)
+        {
+            return UniTask.Yield(PlayerLoopTiming.LastUpdate, _token).SuppressCancellationThrow();
+        }
 
         private void Setup()
         {
@@ -202,12 +209,12 @@ namespace HistoryCrash.Cutscene
         }
 
         // 0 = Retry, 1 = Main Menu
-        private void Choose(int _i) { if (_leaving) return; _sel = _i; _leaving = true; StartCoroutine(Leave(_i == 0)); }
+        private void Choose(int _i) { if (_leaving) return; _sel = _i; _leaving = true; LeaveAsync(_i == 0, destroyCancellationToken).Forget(); }
 
-        private IEnumerator Leave(bool _retry)
+        private async UniTaskVoid LeaveAsync(bool _retry, CancellationToken _token)
         {
             float _t = Time.unscaledTime;
-            while (_out > 0f) { _out = 1f - Mathf.Clamp01((Time.unscaledTime - _t) / 0.5f); Apply(Frame); yield return null; }
+            while (_out > 0f) { _out = 1f - Mathf.Clamp01((Time.unscaledTime - _t) / 0.5f); Apply(Frame); if (await NextFrame(_token)) return; }
             _mix.Stop(); _loop.Stop();
             Cursor.visible = false;
 
@@ -220,11 +227,11 @@ namespace HistoryCrash.Cutscene
 #if UNITY_EDITOR
             else _op = UnityEditor.SceneManagement.EditorSceneManager.LoadSceneAsyncInPlayMode(_path, new LoadSceneParameters(LoadSceneMode.Single));
 #endif
-            if (_op == null) { Debug.LogError("[GameOverCutscene] 씬을 열 수 없음: " + _name); BossIntroCutscene.SkipNext = false; Destroy(gameObject); yield break; }
-            while (!_op.isDone) yield return null;
-            yield return null;
+            if (_op == null) { Debug.LogError("[GameOverCutscene] 씬을 열 수 없음: " + _name); BossIntroCutscene.SkipNext = false; Destroy(gameObject); return; }
+            while (!_op.isDone) if (await NextFrame(_token)) return;
+            if (await NextFrame(_token)) return;
             _t = Time.unscaledTime; float _a = 1f;
-            while (_a > 0f) { _a = 1f - Mathf.Clamp01((Time.unscaledTime - _t) / 0.6f); _bg.color = new Color(BG.r, BG.g, BG.b, _a); yield return null; }
+            while (_a > 0f) { _a = 1f - Mathf.Clamp01((Time.unscaledTime - _t) / 0.6f); _bg.color = new Color(BG.r, BG.g, BG.b, _a); if (await NextFrame(_token)) return; }
             Destroy(gameObject);
         }
 
