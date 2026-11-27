@@ -1,5 +1,6 @@
-using System.Collections;
 using System.Collections.Generic;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Serialization;
 using HistoryCrash.Boss;
@@ -50,6 +51,15 @@ namespace HistoryCrash.Stage
         [SerializeField, FormerlySerializedAs("circleWidth")] private float _circleWidth = 0.035f;
         [SerializeField, Tooltip("텍스처 마법진(아누비스의 자기 선언) 지름(m). 텍스처가 없으면 위의 선 마법진을 씀")] private float _decalDiameter = 2.4f;
 
+        [Header("타워 부서짐(텔레포트 1회마다 그 타워가 부서지고, 모두 부서지면 잠시 뒤 다시 세워짐)")]
+        [SerializeField, Tooltip("마지막 타워가 다 부서진 뒤 다시 세워지기까지(초)")] private float _rebuildDelay = 5f;
+        [SerializeField, Tooltip("부서지는 애니메이션 길이(초, Zedtop_impe_Break 클립)")] private float _breakTime = 8.3f;
+        [SerializeField, Tooltip("다시 세워지는 애니메이션 길이(초, Zedtop_impe_Rebuild 클립)")] private float _rebuildTime = 5.7f;
+        [SerializeField, Tooltip("타워 Animator의 부서짐 트리거 이름")] private string _breakTrigger = "Break";
+        [SerializeField, Tooltip("타워 Animator의 다시 세워짐 트리거 이름")] private string _rebuildTrigger = "Rebuild";
+        private readonly HashSet<Transform> _broken = new HashSet<Transform>();
+        private float _lastBreak;
+
         public string Status { get; private set; } = "";
 
         private readonly List<Renderer> _eyes = new List<Renderer>();
@@ -65,7 +75,23 @@ namespace HistoryCrash.Stage
             if (_player) _movable = _player.GetComponent<IForcedMovable>();
             if (_pillars.Count == 0) CollectPillars();
             CreateEyes(); SetEyes(0f);
-            StartCoroutine(Loop());
+            _loopCts = CancellationTokenSource.CreateLinkedTokenSource(destroyCancellationToken);
+            LoopAsync(_loopCts.Token).Forget();
+        }
+
+        private CancellationTokenSource _loopCts;
+
+        // 꺼지면(게임 종료 등) 코루틴처럼 주기도 멈춘다
+        private void OnDisable()
+        {
+            if (_loopCts == null) return;
+            _loopCts.Cancel(); _loopCts.Dispose(); _loopCts = null;
+        }
+
+        // 다음 프레임까지 대기. LastUpdate = 모든 Update 뒤라 코루틴(yield return null)과 같은 순서. 취소되면 true
+        private static UniTask<bool> NextFrame(CancellationToken _token)
+        {
+            return UniTask.Yield(PlayerLoopTiming.LastUpdate, _token).SuppressCancellationThrow();
         }
 
         private void CollectPillars()
@@ -74,7 +100,8 @@ namespace HistoryCrash.Stage
             if (!_root || _grid == null) return;
             foreach (Transform _c in _root.transform)
             {
-                if (_c.name.Contains("East")) continue;   // 제단 쪽(파라오 뒤) 기둥 제외
+                // 경기장 안쪽 타워(Zedtop) 6개만: 벽 쪽 큰 기둥과 제단 쪽(파라오 뒤) 기둥은 제외
+                if (!_c.name.StartsWith("Zedtop")) continue;
                 _pillars.Add(_c);
             }
         }
@@ -106,32 +133,36 @@ namespace HistoryCrash.Stage
             foreach (var _l in _eyeLights) _l.intensity = _eyeLightIntensity * _k;
         }
 
-        private IEnumerator Loop()
+        private async UniTaskVoid LoopAsync(CancellationToken _token)
         {
-            yield return new WaitForSeconds(_firstDelay);
+            if (await UniTask.Delay(System.TimeSpan.FromSeconds(_firstDelay), cancellationToken: _token).SuppressCancellationThrow()) return;
             while (true)
             {
-                yield return Trigger();
+                if (await TriggerAsync(_token)) return;   // 취소되면 true
+                if (_pillars.Count > 0 && _broken.Count >= _pillars.Count) { if (await RebuildAllAsync(_token)) return; }   // 6개 다 부서지면 잠시 뒤 다시 세움
                 float _wait = Mathf.Max(0f, _period - _warnTime - _pullTime);
-                for (float _t = _wait; _t > 0f; _t -= Time.deltaTime) { Status = "Anubis: next in " + _t.ToString("F1") + "s"; yield return null; }
+                for (float _t = _wait; _t > 0f; _t -= Time.deltaTime) { Status = "Anubis: next in " + _t.ToString("F1") + "s"; if (await NextFrame(_token)) return; }
             }
         }
 
-        /// <summary>강제 이동 1회(테스트용으로 바로 부를 수 있음)</summary>
-        public IEnumerator Trigger()
+        /// <summary>강제 이동 1회(테스트용으로 바로 부를 수 있음). 취소되면 true</summary>
+        public async UniTask<bool> TriggerAsync(CancellationToken _token)
         {
-            if (!_player || _grid == null || _pillars.Count == 0 || _busy) yield break;
+            if (!_player || _grid == null || _pillars.Count == 0 || _busy) return false;
             _busy = true;
-            try { yield return TriggerBody(); }
+            try { return await TriggerBodyAsync(_token); }
             finally { _busy = false; }   // 조작 잠금은 PlayerForcedMover가 항상 풀어 줌
         }
         private bool _busy;   // 강제 이동이 겹쳐 실행되면 이동 스크립트가 꺼진 채 남는 문제 방지
 
-        private IEnumerator TriggerBody()
+        private async UniTask<bool> TriggerBodyAsync(CancellationToken _token)
         {
             // 1) 기둥과 도착 칸 고르기: 기둥 아래 칸에서 가장 가까운 안전한 칸
             //    호루스 붕괴로 사라졌거나 곧 사라질 칸(경고·붕괴·수복 중)은 제외
-            Transform _pillar = _pillars[Random.Range(0, _pillars.Count)];
+            //    아직 서 있는 타워 중에서만 고름
+            var _intact = _pillars.FindAll(_p => _p && !_broken.Contains(_p));
+            if (_intact.Count == 0) return false;
+            Transform _pillar = _intact[Random.Range(0, _intact.Count)];
             Bounds _pb = Bounds(_pillar);
             var _pillarCell = _grid.WorldToCell(new Vector3(_pb.center.x, 0, _pb.center.z));
             var _dest = PickDest(_pillarCell);
@@ -148,6 +179,7 @@ namespace HistoryCrash.Stage
             var _decal = MakeDecal(_fx, _destPos + Vector3.up * 0.02f);
             var _circle = _decal != null ? new List<LineRenderer>() : MagicCircle(_fx, _destPos + Vector3.up * 0.02f);
             _decalAngle = Random.Range(0f, 360f);
+            HistoryCrash.Sound.GameSfx.Play("Anubis_Warning", _top);   // 끌려감·착지 소리는 GameSfx가 IForcedMovable 알림으로 냄
 
             for (float _t = 0; _t < _warnTime; _t += Time.deltaTime)
             {
@@ -161,7 +193,7 @@ namespace HistoryCrash.Stage
                 // 예고 도중 호루스가 도착 칸(주변 포함)을 붕괴 대상으로 고르면 마법진을 안전한 칸으로 옮김
                 if (!IsGoodDest(_dest)) { _dest = PickDest(_pillarCell); _destPos = _grid.CellCenter(_dest, _grid.FloorTopY); MoveCircle(_circle, _decal, _destPos + Vector3.up * 0.02f); }
                 Status = "Anubis: pull in " + (_warnTime - _t).ToString("F1") + "s";
-                yield return null;
+                if (await NextFrame(_token)) return true;
             }
 
             // 3) 강제 이동(이동 중 무적 + 도착 후 0.5초 무적)
@@ -173,7 +205,8 @@ namespace HistoryCrash.Stage
             BurstAt(_from + Vector3.up * 0.3f);
             if (_movable != null && _movable.TryForceMove(_destPos))
             {
-                while (_movable.IsForceMoving) yield return null;
+                while (_movable.IsForceMoving) if (await NextFrame(_token)) return true;
+                BreakTower(_pillar);   // 끌려간 뒤(착지 순간) 기준 타워가 부서짐. 끌려가지 않았으면 부서지지 않음
             }
             BurstAt(_player.position + Vector3.up * 0.3f);
             if (_trail) { var _em = _trail.emission; _em.rateOverTime = 0; _trail.transform.SetParent(null, true); Destroy(_trail.gameObject, 1f); }
@@ -186,13 +219,46 @@ namespace HistoryCrash.Stage
                 SetEyes(_k); _pl.intensity = _pillarLightIntensity * _k; SetPillarGlow(_prs, 1f + (_pillarEmissionBoost - 1f) * _k);
                 foreach (var _lr in _circle) { var _c = _lr.startColor; _c.a = _k; _lr.startColor = _lr.endColor = _c; }
                 if (_decal != null) { _decalAngle += 50f * Time.deltaTime; _decal.Set(CircleColor(), _k, _decalAngle); }
-                yield return null;
+                if (await NextFrame(_token)) return true;
             }
             SetEyes(0f); SetPillarGlow(_prs, 1f);
             var _fem = _flame.emission; _fem.rateOverTime = 0; _flame.transform.SetParent(null, true); Destroy(_flame.gameObject, 1.5f);
             Destroy(_fx.gameObject);
             Status = "";
+            return false;
         }
+
+        // ---------- 타워 부서짐·다시 세워짐 ----------
+        // 타워 자리는 부서져도 계속 막힘(타워 충돌체는 그대로 둠). 잔해는 통과할 수 있어야 하므로 애니메이션의 잔해에는 충돌체를 넣지 않음.
+        // 타워에 Animator가 있으면 Break/Rebuild 트리거로 애니메이션을 재생함(무너진 모습 그대로 남아 있음).
+        // 애니메이션이 아직 없으면 타워는 그대로 두고 파티클만 터뜨림.
+        private void BreakTower(Transform _tower)
+        {
+            _broken.Add(_tower); _lastBreak = Time.time;
+            var _anim = _tower.GetComponentInChildren<Animator>();
+            if (_anim) _anim.SetTrigger(_breakTrigger);
+            else BurstAt(Bounds(_tower).center);
+            Debug.Log("[Anubis] Tower broken: " + _tower.name + " (" + _broken.Count + "/" + _pillars.Count + ")");
+        }
+
+        private async UniTask<bool> RebuildAllAsync(CancellationToken _token)
+        {
+            for (float _t; (_t = _lastBreak + _breakTime + _rebuildDelay - Time.time) > 0f;) { Status = "Anubis: towers rebuild in " + _t.ToString("F1") + "s"; if (await NextFrame(_token)) return true; }
+            foreach (var _tower in _broken)
+            {
+                if (!_tower) continue;
+                var _anim = _tower.GetComponentInChildren<Animator>();
+                if (_anim) _anim.SetTrigger(_rebuildTrigger);
+            }
+            for (float _t = 0; _t < _rebuildTime; _t += Time.deltaTime) { Status = "Anubis: towers rebuilding"; if (await NextFrame(_token)) return true; }
+            _broken.Clear();
+            Debug.Log("[Anubis] Towers rebuilt");
+            return false;
+        }
+
+        /// <summary>테스트용: 부서진 타워 수와 전체 수</summary>
+        public int BrokenCount => _broken.Count;
+        public int TowerCount => _pillars.Count;
 
         // ---------- 도착 칸 ----------
         /// <summary>도착 칸과 주변 8칸이 모두 서 있을 수 있고, 호루스 붕괴 대상(경고·붕괴·수복 중)이 아님</summary>
@@ -409,7 +475,7 @@ namespace HistoryCrash.Stage
 
         private void OnGUI()
         {
-            if (HistoryCrash.UI.PauseSettingsUI.IsOpen) return;   // 설정창이 열리면 OnGUI 글자는 그리지 않음(항상 UI 위에 그려지므로)
+            if (HistoryCrash.UI.PauseSettingsUI.IsOpen || !HistoryCrash.UI.DebugHudLayout.Show) return;   // 설정창이 열리면 OnGUI 글자는 그리지 않음(항상 UI 위에 그려지므로)
             if (!string.IsNullOrEmpty(Status)) GUI.Label(new Rect(20, HistoryCrash.UI.DebugHudLayout.Top + 104, 400, 20), Status);
         }
     }

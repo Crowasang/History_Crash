@@ -1,5 +1,6 @@
-using System.Collections;
 using System.Collections.Generic;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Serialization;
 using HistoryCrash.Boss;
@@ -14,7 +15,7 @@ namespace HistoryCrash.Enemy
 {
     /// <summary>
     /// 보스 패턴과 패턴 사이에 머미를 소환한다.
-    /// - 성별(여/남)과 속성(불·물·전기·풀)은 무작위.
+    /// - 성별(여/남)과 속성(불·물·전기)은 무작위.
     /// - 파라오 제단 계단 아래 칸(파라오에서 가장 가까운 걷기 가능 칸 주변)에서 속성 불꽃이 피어오른 뒤 바닥에서 솟아오른다.
     /// </summary>
     public class MummySpawner : MonoBehaviour
@@ -31,6 +32,7 @@ namespace HistoryCrash.Enemy
         [SerializeField, FormerlySerializedAs("perGap"), Tooltip("패턴 사이마다 소환할 수")] private int _perGap = 1;
         [SerializeField, FormerlySerializedAs("spawnSpread"), Tooltip("소환 칸 후보: 계단 아래 기준 칸에서 이 칸수 안")] private int _spawnSpread = 1;
         [SerializeField, FormerlySerializedAs("spawnCells"), Tooltip("직접 지정한 소환 칸(비우면 자동)")] private List<Vector2Int> _spawnCells = new List<Vector2Int>();
+        [SerializeField, Tooltip("소환 기준점(계단 앞 빈 오브젝트). 비우면 파라오 위치 기준. 이 점에서 가장 가까운 바닥 칸 주변 Spawn Spread 칸 안에서 나옴")] private Transform _spawnCenter;
         [SerializeField, FormerlySerializedAs("flameTime")] private float _flameTime = 0.9f;
         [SerializeField, FormerlySerializedAs("riseTime")] private float _riseTime = 0.6f;
         [SerializeField, FormerlySerializedAs("footOffset"), Tooltip("모델 원점에서 발바닥까지(바닥 위로 올리는 양, m)")] private float _footOffset = 0.07f;
@@ -48,11 +50,27 @@ namespace HistoryCrash.Enemy
 
         private void OnDestroy() { if (_director) _director.OnPatternGap -= SpawnWave; }
 
+        // 소환 중인 작업 취소용. 게임이 끝나 소환기가 꺼지면(ActiveOnlyWhilePlaying) 코루틴처럼 소환도 멈춘다
+        private CancellationTokenSource _spawnCts;
+
+        private void OnDisable()
+        {
+            if (_spawnCts == null) return;
+            _spawnCts.Cancel(); _spawnCts.Dispose(); _spawnCts = null;
+        }
+
+        private CancellationToken SpawnToken()
+        {
+            if (_spawnCts == null) _spawnCts = CancellationTokenSource.CreateLinkedTokenSource(destroyCancellationToken);
+            return _spawnCts.Token;
+        }
+
         private void EnsureSpawnCells()
         {
             if (_spawnCells.Count > 0 || _grid == null || !_pharaoh) return;
             // 파라오 칸에서 가장 가까운 걷기 가능 칸 = 제단 계단 아래
-            var _baseCell = _grid.NearestSolid(_grid.WorldToCell(_pharaoh.position));
+            var _center = _spawnCenter ? _spawnCenter.position : _pharaoh.position;
+            var _baseCell = _grid.NearestSolid(_grid.WorldToCell(_center));
             for (int _dy = -_spawnSpread; _dy <= _spawnSpread; _dy++)
                 for (int _dx = -_spawnSpread; _dx <= _spawnSpread; _dx++)
                 {
@@ -65,21 +83,22 @@ namespace HistoryCrash.Enemy
         public void SpawnWave()
         {
             if (_pharaohHealth != null && !_pharaohHealth.IsAlive) return;
+            if (!isActiveAndEnabled) return;   // 게임이 끝나 꺼진 뒤에는 소환하지 않음
             for (int _i = 0; _i < _perGap; _i++)
             {
                 // 아직 솟아오르는 중인 머미(pending)까지 세어 최대 수를 넘지 않게
                 if (Mummy.Alive.Count + _pending >= _maxAlive) return;
                 _pending++;
-                StartCoroutine(SpawnOne());
+                SpawnOneAsync(SpawnToken()).Forget();
             }
         }
 
         private int _pending;
 
-        private IEnumerator SpawnOne()
+        private async UniTaskVoid SpawnOneAsync(CancellationToken _token)
         {
             EnsureSpawnCells();
-            if (_spawnCells.Count == 0) { _pending--; yield break; }
+            if (_spawnCells.Count == 0) { _pending--; return; }
             // 다른 머미와 가장 멀리 떨어진 후보 칸(같으면 무작위)
             Vector2Int _cell = _spawnCells[Random.Range(0, _spawnCells.Count)]; float _bestGap = -1f;
             foreach (var _c in _spawnCells)
@@ -94,7 +113,11 @@ namespace HistoryCrash.Enemy
             Vector3 _floor = _grid.CellCenter(_cell, _grid.FloorTopY);
 
             ElementFx.Flame(_element, _floor, _flameTime + _riseTime, 0.42f);
-            yield return new WaitForSeconds(_flameTime * 0.6f);
+            if (await UniTask.Delay(System.TimeSpan.FromSeconds(_flameTime * 0.6f), cancellationToken: _token).SuppressCancellationThrow())
+            {
+                _pending--;   // 생성 전에 멈춤 → 대기 수에서 빼 둠
+                return;
+            }
 
             var _prefab = _gender == MummyGender.Female ? _femalePrefab : _malePrefab;
             // 소환기 자식으로 생성: 게임이 끝나 소환기가 꺼지면(ActiveOnlyWhilePlaying) 미라도 함께 멈춤
@@ -113,7 +136,7 @@ namespace HistoryCrash.Enemy
             {
                 float _u = _t / _riseTime; _u = 1f - (1f - _u) * (1f - _u);
                 _go.transform.position = Vector3.Lerp(_bottom, _top, _u);
-                yield return null;
+                if (await UniTask.Yield(_token).SuppressCancellationThrow()) return;
             }
             _go.transform.position = _top;
             _m.Activate();

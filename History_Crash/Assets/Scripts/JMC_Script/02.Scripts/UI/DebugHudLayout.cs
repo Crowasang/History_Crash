@@ -11,5 +11,8 @@ namespace HistoryCrash.UI
     {
         /// <summary>디버그 글자를 시작할 높이(px): 나침반 높이 + 여백</summary>
         public static float Top => Screen.height * (340f / 1080f);
+
+        /// <summary>왼쪽 위 디버그 글자(패턴·Hits·조작법·Staff/Orb·호루스·아누비스) 표시 여부. 출시 화면에서는 끔</summary>
+        public static bool Show = false;
     }
 }

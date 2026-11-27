@@ -31,13 +31,16 @@ namespace HistoryCrash.UI
 
         private const string TEX = "UI/Settings/";
         private const float BOOK_W = 960f, BOOK_H = 560f;   // 아래 좌표의 기준(도감 렌더 px). 실제 이미지는 2배 해상도
-        private static readonly Color INK = new Color32(44, 26, 10, 228);
-        private static readonly Color INK_SOFT = new Color32(70, 45, 20, 200);
+        // 밝은 양피지 위에서 잘 읽히게 진하고 불투명한 잉크
+        private static readonly Color INK = new Color32(30, 16, 4, 255);
+        private static readonly Color INK_SOFT = new Color32(55, 34, 14, 235);
+        private static readonly Color RUBY = new Color32(150, 22, 28, 255);   // 고른 메뉴·마우스를 올린 글자
+        private const string HOVER_SFX = "UI_Settings_Hover";               // Resources/UI/Settings/
 
         [Header("배치(기준 해상도 1920×1080)")]
-        [SerializeField, Tooltip("도감 렌더 1px이 화면 몇 px인지")] private float _scale = 1.6f;
+        [SerializeField, Tooltip("도감 렌더 1px이 화면 몇 px인지")] private float _scale = 1.9f;
         [SerializeField] private float _yOffset = -12f;
-        [SerializeField, Range(0f, 1f)] private float _dim = 0.62f;
+        [SerializeField, Range(0f, 1f)] private float _dim = 0.8f;
 
         [Header("열기/닫기 연출(초, 게임이 멈춰도 흐르는 시간)")]
         [SerializeField, Tooltip("덮인 도감이 아래에서 올라오는 시간")] private float _riseTime = 0.32f;
@@ -48,7 +51,7 @@ namespace HistoryCrash.UI
 
         // ---- 설정 값(PlayerPrefs) ----
         private const string K_SENS = "HC_MouseSens", K_INV = "HC_InvertY", K_MASTER = "HC_Master", K_MUSIC = "HC_Music", K_SFX = "HC_Effects", K_FULL = "HC_Fullscreen", K_BRIGHT = "HC_Brightness";
-        private const float D_SENS = 5f, D_MASTER = 100f, D_MUSIC = 70f, D_SFX = 100f, D_BRIGHT = 50f;
+        private const float D_SENS = 5f, D_MASTER = 100f, D_MUSIC = 50f, D_SFX = 50f, D_BRIGHT = 50f;
         private const float SENS_TO_CAMERA = 0.024f;         // 슬라이더 5 = 카메라 0.12(기본값)
 
         private Canvas _canvas; private CanvasGroup _group;
@@ -156,6 +159,7 @@ namespace HistoryCrash.UI
             bool _has = _frames != null && _frames.Length > 1;
             _bookImg.sprite = _has ? _frames[0] : _bookStatic;
             var _seq = DOTween.Sequence().SetUpdate(true).SetLink(gameObject);
+            PlayBookSfx(true);   // 소리 안 표지 '탁'이 0.32초 = 다 올라와 표지가 넘어가는 순간
             // 1) 덮인 채로 올라옴(살짝 튀어 오름)
             _seq.Append(DOVirtual.Float(0f, 1f, _riseTime, _u =>
             {
@@ -184,7 +188,7 @@ namespace HistoryCrash.UI
             float _tText = _closeTime * 0.15f, _tFlip = _has ? _closeTime * 0.55f : 0f, _tDrop = _closeTime - _tText - _tFlip;
             var _seq = DOTween.Sequence().SetUpdate(true).SetLink(gameObject);
             _seq.Append(DOVirtual.Float(1f, 0f, _tText, SetContent).SetEase(Ease.Linear));
-            _seq.AppendCallback(() => SetContent(0f));
+            _seq.AppendCallback(() => { SetContent(0f); PlayBookSfx(false); });   // 소리 안 '탁'(0.22초)이 표지가 다 덮이는 순간과 맞음
             if (_has)
                 _seq.Append(DOVirtual.Float(1f, 0f, _tFlip, _u =>   // 거꾸로
                 {
@@ -244,6 +248,7 @@ namespace HistoryCrash.UI
             _selR.rectTransform.anchoredPosition = _c + new Vector2(_w / 2f + 9f, 0f);
             _selLine.rectTransform.anchoredPosition = _c + new Vector2(0f, -8f);
             _selLine.rectTransform.sizeDelta = new Vector2(_w, 2.2f);
+            for (int i = 0; i < _menu.Length; i++) SetRgb(_menu[i], i == _p ? RUBY : INK);   // 고른 메뉴는 루비색
         }
 
         // ================= 메인메뉴로 =================
@@ -259,7 +264,7 @@ namespace HistoryCrash.UI
             _fade?.Kill();
             var _black = new Color(0f, 0f, 0f, 1f);
             Color _d0 = _dimImg.color;
-            Vector2 _p0 = _book.anchoredPosition; float _s0 = _book.localScale.x, _s1 = _scale * (1700f / 740f) / 1.6f;   // 책이 화면을 채우는 크기(메인메뉴 → 게임 전환과 같은 비율)
+            Vector2 _p0 = _book.anchoredPosition; float _s0 = _book.localScale.x, _s1 = 1700f / 740f;   // 책이 화면을 채우는 크기(메인메뉴 → 게임 전환과 같은 비율)
             var _seq = DOTween.Sequence().SetUpdate(true).SetLink(gameObject);
             _seq.Append(DOVirtual.Float(1f, 0f, 0.15f, SetContent).SetEase(Ease.Linear));
             _seq.Append(DOVirtual.Float(0f, 1f, 0.7f, _u =>
@@ -342,7 +347,9 @@ namespace HistoryCrash.UI
         private void Build()
         {
             _canvas = gameObject.AddComponent<Canvas>();
-            _canvas.renderMode = RenderMode.ScreenSpaceOverlay; _canvas.sortingOrder = 50;
+            // 컷신 글자(60~70)보다 위, 메인메뉴→게임 전환(1000)보다 아래
+            _canvas.renderMode = RenderMode.ScreenSpaceOverlay; _canvas.sortingOrder = 100;
+            _hoverClip = Resources.Load<AudioClip>(TEX + HOVER_SFX);
             var _scaler = gameObject.AddComponent<CanvasScaler>();
             _scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             _scaler.referenceResolution = new Vector2(1920f, 1080f); _scaler.matchWidthOrHeight = 0.5f;
@@ -375,7 +382,7 @@ namespace HistoryCrash.UI
             for (int i = 0; i < _names.Length; i++)
             {
                 float _y = 222 + i * 38;
-                var _t = Label(_names[i], 322, _y, 21f, TextAlignmentOptions.Center, 180, INK);
+                var _t = Label(_names[i], 322, _y, 22f, TextAlignmentOptions.Center, 180, INK);
                 int _idx = i;
                 MakeButton(_t, () => OnMenu(_idx));
                 _menu[i] = _t;
@@ -383,7 +390,7 @@ namespace HistoryCrash.UI
             }
             _selL = Picture("UI_Settings_Diamond", 0, 0, 6f, 6f); _selR = Picture("UI_Settings_Diamond", 0, 0, 6f, 6f);
             _selLine = Picture("UI_Settings_Line", 0, 0, 10f, 2.2f);
-            var _esc = Label("Esc  ·  Close", 322, 408, 13f, TextAlignmentOptions.Center, 160, INK);
+            var _esc = Label("Esc  ·  Close", 322, 408, 14.5f, TextAlignmentOptions.Center, 160, INK);
             MakeButton(_esc, Close);
 
             // ---- 오른쪽 ----
@@ -416,7 +423,7 @@ namespace HistoryCrash.UI
                 v => { PlayerPrefs.SetFloat(K_BRIGHT, v); ApplyBrightness(v); });
             LanguageRow(_p, LX, VX, 383);
             Line(604, 398, 672, 1f, INK_SOFT, _p);
-            var _rd = Label("Restore Defaults", 638, 410, 13f, TextAlignmentOptions.Center, 180, INK, _p);
+            var _rd = Label("Restore Defaults", 638, 410, 14.5f, TextAlignmentOptions.Center, 180, INK, _p);
             MakeButton(_rd, RestoreDefaults);
         }
 
@@ -438,8 +445,8 @@ namespace HistoryCrash.UI
             for (int i = 0; i < _n; i++)
             {
                 float _y = 200 + i * 16.5f;
-                _ctrlKey[i] = Label(CONTROLS[i, 0], 543, _y, 13f, TextAlignmentOptions.Left, 100, INK, _p, true);
-                _ctrlDesc[i] = Label(CONTROLS[i, 1], 737, _y, 13f, TextAlignmentOptions.Right, 120, INK, _p, false, true);
+                _ctrlKey[i] = Label(CONTROLS[i, 0], 543, _y, 14f, TextAlignmentOptions.Left, 100, INK, _p, true);
+                _ctrlDesc[i] = Label(CONTROLS[i, 1], 737, _y, 14f, TextAlignmentOptions.Right, 120, INK, _p, false, true);
                 if (i < _n - 1) Line(543, _y + 8.2f, 737, 0.5f, new Color(INK_SOFT.r, INK_SOFT.g, INK_SOFT.b, 0.35f), _p);
             }
             RefreshControls();
@@ -462,22 +469,22 @@ namespace HistoryCrash.UI
             bool _hangul = false;
             foreach (char _c in _s) if (_c >= 0xAC00 && _c <= 0xD7A3) { _hangul = true; break; }
             _t.font = _hangul && _ko ? _ko : _font;
-            _t.fontSize = _hangul && _ko ? 11.5f : 13f;
+            _t.fontSize = _hangul && _ko ? 12.5f : 14f;
             _t.text = _s;
         }
 
         // ---- 행 ----
         private void Section(Transform _p, string _s, float _x0, float _y, float _x1)
         {
-            var _t = Label(_s, _x0, _y, 12.8f, TextAlignmentOptions.Left, 120, new Color(INK.r, INK.g, INK.b, 0.72f), _p, true);
+            var _t = Label(_s, _x0, _y, 13.5f, TextAlignmentOptions.Left, 120, new Color(INK.r, INK.g, INK.b, 0.95f), _p, true);
             float _w = _t.GetPreferredValues(_s).x;
             Line(_x0 + _w + 5f, _y, _x1, 0.8f, INK_SOFT, _p);
         }
 
         private Slider SliderRow(Transform _p, string _name, float _lx, float _sx, float _ex, float _vx, float _y, float _min, float _max, float _val, bool _whole, System.Action<float> _onChange)
         {
-            Label(_name, _lx, _y, 14.2f, TextAlignmentOptions.Left, 130, INK, _p, true);
-            var _valT = Label("", _vx, _y, 12.8f, TextAlignmentOptions.Right, 28, INK, _p, false, true);
+            Label(_name, _lx, _y, 14.8f, TextAlignmentOptions.Left, 130, INK, _p, true);
+            var _valT = Label("", _vx, _y, 14f, TextAlignmentOptions.Right, 28, INK, _p, false, true);
 
             var _root = new GameObject(_name + "_Slider", typeof(RectTransform)).GetComponent<RectTransform>();
             _root.SetParent(_p, false); Place(_root, (_sx + _ex) / 2f, _y, _ex - _sx + 4f, 12f);
@@ -496,6 +503,7 @@ namespace HistoryCrash.UI
             _show(_val);
             _s.onValueChanged.AddListener(v => { _show(v); _onChange(v); });
             _bg.raycastTarget = true;   // 홈을 눌러도 움직이게
+            AddHover(_root.gameObject, null);
             return _s;
         }
 
@@ -503,9 +511,9 @@ namespace HistoryCrash.UI
         private TextMeshProUGUI _langKo, _langEn; private Image _langLine;
         private void LanguageRow(Transform _p, float _lx, float _vx, float _y)
         {
-            Label("Language", _lx, _y, 14.2f, TextAlignmentOptions.Left, 130, INK, _p, true);
-            _langEn = Label("English", _vx, _y, 13f, TextAlignmentOptions.Right, 52, INK, _p, false, true);
-            _langKo = Label("한국어", _vx - 58f, _y, 11.5f, TextAlignmentOptions.Right, 40, INK, _p, false, true);
+            Label("Language", _lx, _y, 14.8f, TextAlignmentOptions.Left, 130, INK, _p, true);
+            _langEn = Label("English", _vx, _y, 14f, TextAlignmentOptions.Right, 52, INK, _p, false, true);
+            _langKo = Label("한국어", _vx - 58f, _y, 12.5f, TextAlignmentOptions.Right, 40, INK, _p, false, true);
             var _ko = KoreanFont(); if (_ko) _langKo.font = _ko;   // EB Garamond에는 한글이 없어 한글만 컴퓨터의 한글 글꼴로
             _langLine = NewImage("LangLine", _p, Sprite("UI_Settings_Line"));
             MakeButton(_langKo, () => SetLanguage(GameLanguage.Lang.Korean));
@@ -518,7 +526,7 @@ namespace HistoryCrash.UI
         private void ShowLanguage()
         {
             bool _k = GameLanguage.IsKorean;
-            _langKo.alpha = _k ? 1f : 0.38f; _langEn.alpha = _k ? 0.38f : 1f;
+            _langKo.alpha = _k ? 1f : 0.6f; _langEn.alpha = _k ? 0.6f : 1f;
             var _t = _k ? _langKo : _langEn;
             float _w = _t.GetPreferredValues(_t.text).x;
             var _rt = _t.rectTransform;
@@ -535,6 +543,9 @@ namespace HistoryCrash.UI
         {
             if (_koTried) return _koFont;
             _koTried = true;
+            // 게임에 넣은 한글 폰트(송명, OFL) 먼저. 없으면(아트 파일을 아직 안 받은 PC) 컴퓨터의 한글 글꼴로
+            _koFont = Resources.Load<TMP_FontAsset>(TEX + "Font/SongMyung_Regular_SDF");
+            if (_koFont) return _koFont;
             string[,] _cands = { { "Malgun Gothic", "Bold" }, { "Malgun Gothic", "Regular" }, { "Apple SD Gothic Neo", "Bold" }, { "Noto Sans CJK KR", "Bold" } };
             for (int i = 0; i < _cands.GetLength(0) && _koFont == null; i++)
             {
@@ -545,7 +556,7 @@ namespace HistoryCrash.UI
 
         private Toggle ToggleRow(Transform _p, string _name, float _lx, float _vx, float _y, bool _on, System.Action<bool> _onChange)
         {
-            Label(_name, _lx, _y, 14.2f, TextAlignmentOptions.Left, 130, INK, _p, true);
+            Label(_name, _lx, _y, 14.8f, TextAlignmentOptions.Left, 130, INK, _p, true);
             var _box = NewImage(_name + "_Toggle", _p, Sprite("UI_Settings_Check"));
             _box.raycastTarget = true; Place(_box.rectTransform, _vx - 6f, _y, 13f, 13f);
             var _mark = NewImage("On", _box.rectTransform, Sprite("UI_Settings_CheckOn")); Stretch(_mark.rectTransform);
@@ -554,6 +565,7 @@ namespace HistoryCrash.UI
             _t.navigation = new Navigation { mode = Navigation.Mode.None };
             _t.SetIsOnWithoutNotify(_on);
             _t.onValueChanged.AddListener(v => _onChange(v));
+            AddHover(_box.gameObject, null);
             return _t;
         }
 
@@ -577,12 +589,43 @@ namespace HistoryCrash.UI
             _t.raycastTarget = true;
             var _b = _t.gameObject.AddComponent<Button>();
             _b.targetGraphic = _t; _b.navigation = new Navigation { mode = Navigation.Mode.None };
-            var _cb = _b.colors;
-            _cb.normalColor = Color.white; _cb.highlightedColor = new Color(0.62f, 0.5f, 0.42f, 1f);
-            _cb.pressedColor = new Color(0.45f, 0.35f, 0.28f, 1f); _cb.selectedColor = Color.white; _cb.fadeDuration = 0.08f;
-            _b.colors = _cb;
+            _b.transition = Selectable.Transition.None;   // 색은 AddHover가 바꿈(진한 잉크에 곱하는 색조로는 차이가 안 보임)
             _b.onClick.AddListener(_onClick);
+            AddHover(_t.gameObject, _t);
         }
+
+        // ---- 마우스를 올렸을 때: 글자는 루비색, 소리 한 번 ----
+        private AudioClip _hoverClip;
+
+        private void AddHover(GameObject _go, TextMeshProUGUI _t)
+        {
+            var _et = _go.AddComponent<EventTrigger>();
+            var _enter = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+            _enter.callback.AddListener(_ => { PlayHover(); if (_t) SetRgb(_t, RUBY); });
+            var _exit = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
+            _exit.callback.AddListener(_ => { if (_t) SetRgb(_t, IsSelectedMenu(_t) ? RUBY : INK); });
+            _et.triggers.Add(_enter); _et.triggers.Add(_exit);
+        }
+
+        private void PlayHover()
+        {
+            if (_hoverClip && SoundManager.Instance) SoundManager.Instance.PlaySfx(_hoverClip, 0.6f);   // 설정창이 열려 멈춘 동안에도 재생됨
+        }
+
+        // 도감 열림·닫힘 소리 = 메인메뉴 'Chronicles of the Magic Book'의 책 소리(표지 탁·책장 넘김)를 잘라 연출 시간에 맞춘 것
+        private AudioClip _openClip, _closeClip;
+        private void PlayBookSfx(bool _open)
+        {
+            if (_open) { if (!_openClip) _openClip = Resources.Load<AudioClip>(TEX + "UI_Settings_Open"); }
+            else if (!_closeClip) _closeClip = Resources.Load<AudioClip>(TEX + "UI_Settings_Close");
+            var _c = _open ? _openClip : _closeClip;
+            if (_c && SoundManager.Instance) SoundManager.Instance.PlaySfx(_c, 0.9f);
+        }
+
+        private bool IsSelectedMenu(TextMeshProUGUI _t) { return _page >= 0 && _page < _menu.Length && _menu[_page] == _t; }
+
+        // 알파(언어 선택의 흐림 등)는 그대로 두고 색만 바꿈
+        private static void SetRgb(TextMeshProUGUI _t, Color _c) { if (_t) _t.color = new Color(_c.r, _c.g, _c.b, _t.color.a); }
 
         private Image Line(float _x0, float _y, float _x1, float _h, Color _c, Transform _p = null)
         {

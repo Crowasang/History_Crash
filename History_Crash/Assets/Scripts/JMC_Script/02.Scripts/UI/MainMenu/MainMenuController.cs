@@ -1,6 +1,7 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using DG.Tweening;
 using TMPro;
 using UnityEngine;
@@ -63,15 +64,62 @@ namespace HistoryCrash.UI
         [SerializeField, Tooltip("영상이 바뀔 때 겹쳐 넘어가는 시간(초)")] private float _crossFade = 0.35f;
         [SerializeField, Tooltip("테스트용: 메뉴·줌인을 건너뛰고 인트로 마지막 장면(책장 넘김 표시)부터 시작")] private bool _testFromIntroEnd;
 
+        [Header("시작 로고 영상(게임을 켠 뒤 메뉴 전에 한 번, Esc·클릭·Enter·Space로 건너뛰기)")]
+        [SerializeField, Tooltip("Assets/Art/Logo(git에 올리지 않음). 비어 있으면 로고 없이 바로 메뉴")] private VideoClip _logoClip;
+
+        [Header("튜토리얼(조작법 다음 장부터 한 장씩: 왼쪽 그림, 오른쪽 설명)")]
+        [SerializeField] private MainMenuTutorialPage[] _tutorialPages =
+        {
+            new MainMenuTutorialPage("UI/Tutorial/01_BossAttack", "파라오의 공격", "The Pharaoh's Attacks",
+                "파라오는 제단 위에서 다섯 가지\n패턴을 번갈아 쓰며 공격합니다.\n\n바닥에 초록빛 길이나 균열이\n나타나면 곧 공격이 떨어집니다.\n표시가 사라지기 전에 달리거나\n점프해서 벗어나세요.",
+                "The Pharaoh stands on the altar and attacks with five patterns in turn.\n\nWhen a green path or crack glows on the floor, an attack is about to land there. Run or jump out before the mark fades."),
+            new MainMenuTutorialPage("UI/Tutorial/02_DroppedWeapon", "떨어진 무기", "Dropped Weapons",
+                "패턴이 끝날 무렵, 그 패턴의 무기가\n빛줄기와 함께 바닥에 떨어집니다.\n\n무기를 주우면 파라오의 공격을\n약하게 따라 쓸 수 있습니다.\n무기는 10초쯤 뒤 사라지니\n서둘러 주우세요.",
+                "Near the end of each pattern, that pattern's weapon falls to the floor in a beam of light.\n\nPick it up to use a weaker version of the Pharaoh's attack. Weapons vanish after about 10 seconds, so be quick."),
+            new MainMenuTutorialPage("UI/Tutorial/03_ElementOrb", "속성 오브", "Element Orbs",
+                "미라는 불 · 물 · 전기 중\n한 속성을 지니고, 걸으면서\n같은 속성의 오브를 떨어뜨립니다.\n오브는 5초 뒤 사라집니다.\n\n주운 오브는 무기에 끼워집니다.\n무기와 오브가 모두 있어야\n공격할 수 있고, 한 번 공격하면\n둘 다 사라집니다.",
+                "Each mummy has one element (Fire, Water or Electric) and drops orbs of that element as it walks. Orbs vanish after 5 seconds.\n\nAn orb you pick up is set in your weapon. You need both a weapon and an orb to attack, and both are used up after one attack."),
+            new MainMenuTutorialPage("UI/Tutorial/04_ElementMummy", "속성 미라", "Element Mummies",
+                "미라 몸을 감싼 테두리 색이\n그 미라의 속성입니다.\n\n오브와 같은 속성의 미라만\n쓰러뜨릴 수 있습니다.\n\n쓰러진 미라의 영혼이 파라오에게\n날아가 피해를 주고, 체력을 모두\n깎으면 신전이 정화됩니다.",
+                "The glowing outline around a mummy shows its element.\n\nYou can only defeat mummies of the same element as your orb.\n\nEach defeated mummy's soul flies to the Pharaoh and deals damage. Bring its HP to zero to purify the temple."),
+        };
+
+        [Header("크레딧(메뉴 Credits: 아래에서 위로 올라감, Esc로 닫기, 클릭·Space를 누르고 있으면 빨리 넘김)")]
+        [SerializeField] private MainMenuCreditEntry[] _credits =
+        {
+            new MainMenuCreditEntry("팀장", "Team Lead", "Crowasang"),
+            new MainMenuCreditEntry("기획", "Game Design", "Crowasang", "Jeong Myoeng Chae", "GyoungTak Lee"),
+            new MainMenuCreditEntry("코어 시스템", "Core System", "Crowasang"),
+            new MainMenuCreditEntry("플레이어", "Player", "Crowasang"),
+            new MainMenuCreditEntry("카메라", "Camera", "Crowasang"),
+            new MainMenuCreditEntry("적", "Enemies", "Jeong Myoeng Chae", "GyoungTak Lee"),
+            new MainMenuCreditEntry("맵 구성", "Level Layout", "Crowasang"),
+            new MainMenuCreditEntry("보스 패턴", "Boss Patterns", "Jeong Myoeng Chae"),
+            new MainMenuCreditEntry("전투", "Combat", "Jeong Myoeng Chae"),
+            new MainMenuCreditEntry("스테이지 기믹", "Stage Gimmicks", "Jeong Myoeng Chae"),
+            new MainMenuCreditEntry("연출", "Cinematics", "Jeong Myoeng Chae"),
+            new MainMenuCreditEntry("UI", "UI", "Jeong Myoeng Chae", "GyoungTak Lee"),
+            new MainMenuCreditEntry("디자인", "Visual Design", "Jeong Myoeng Chae"),
+            new MainMenuCreditEntry("오브젝트 · 이펙트 에셋", "Object & Effect Assets", "Jeong Myoeng Chae", "GyoungTak Lee"),
+            new MainMenuCreditEntry("아웃라인 셰이더", "Outline Shader", "Crowasang"),
+            new MainMenuCreditEntry("사운드", "Sound", "Jeong Myoeng Chae", "GyoungTak Lee"),
+            new MainMenuCreditEntry("개발 도구", "Tools", "Unity", "Blender", "VARCO 3D", "VARCO SOUND"),
+            new MainMenuCreditEntry("도움 주신 분", "Special Thanks", "김동우 강사님", "김성수 강사님"),
+        };
+        [SerializeField, Tooltip("제목 아래 팀 이름")] private string _teamName = "Team History Maker";
+        [SerializeField, Tooltip("크레딧 맨 끝(감사 인사 앞)에 올라가는 줄들")] private string[] _creditEnding = { "NCAI 화이팅!" };
+        [SerializeField, Tooltip("크레딧이 올라가는 속도(기준 해상도 px/초)")] private float _creditSpeed = 80f;
+
         [Header("배치(기준 해상도 1920×1080, 왼쪽 위가 0,0)")]
         [SerializeField] private Vector2 _titlePos = new Vector2(90f, 120f);
         [SerializeField] private float _titleSize = 120f;
         [SerializeField] private Vector2 _menuPos = new Vector2(1560f, 470f);
-        [SerializeField] private float _menuSize = 46f;
+        [SerializeField] private float _menuSize = 56f;
 
         private static readonly Color FACE = new Color32(226, 206, 166, 255);
-        private static readonly Color EDGE = new Color32(60, 36, 18, 200);
-        private static readonly Color RUBY = new Color32(150, 26, 22, 230);
+        private static readonly Color FACE_SEL = new Color32(255, 232, 170, 255);   // 고른 메뉴(더 밝은 금빛)
+        private static readonly Color EDGE = new Color32(40, 22, 8, 230);           // 촛불 빛 받은 책상 위에서도 글자 테두리가 보이게 진하게
+        private static readonly Color RUBY = new Color32(170, 28, 22, 255);
 
         private readonly List<string> _items = new List<string>();
         private readonly List<TextMeshProUGUI> _itemTexts = new List<TextMeshProUGUI>();
@@ -99,6 +147,11 @@ namespace HistoryCrash.UI
         private CanvasGroup _ctrlGroup, _turnGroup;
         private TextMeshProUGUI _turnLabel;
         private RenderTexture _snapRT;
+        private readonly List<CanvasGroup> _pageGroups = new List<CanvasGroup>();   // 0 = 조작법, 1~ = 튜토리얼
+        private CanvasGroup _skipGroup;     // 조작법·튜토리얼 장 오른쪽 아래 '튜토리얼 건너뛰기'
+        private bool _skipTutorial;
+        private CanvasGroup _allSkipGroup;  // 이야기 장 오른쪽 아래 '모두 건너뛰기'
+        private bool _allSkip;
 
         private void Awake()
         {
@@ -126,7 +179,7 @@ namespace HistoryCrash.UI
             // Settings 메뉴 = 게임 안 ESC 설정창과 같은 도감(자기 Canvas를 만들므로 따로 된 오브젝트에)
             _settings = new GameObject("UI_PauseSettings").AddComponent<PauseSettingsUI>();
             _settings.AllowEscOpen = false;   // 메인메뉴에서는 Esc로 열리지 않음(Settings 메뉴로만, 열린 창은 Esc로 닫힘)
-            StartCoroutine(Intro());
+            IntroAsync(destroyCancellationToken).Forget();
         }
 
         private void OnDestroy()
@@ -136,106 +189,154 @@ namespace HistoryCrash.UI
         }
 
         // ================= 흐름 =================
-        private IEnumerator Intro()
+        private async UniTask IntroAsync(CancellationToken _token)
         {
             _menuGroup.alpha = 0f; _menuGroup.interactable = false;
-            if (_testFromIntroEnd) { SetAlpha(_black, 0f); _titleGroup.alpha = 0f; StartCoroutine(StartGame()); yield break; }
+            if (_testFromIntroEnd) { SetAlpha(_black, 0f); _titleGroup.alpha = 0f; StartGameAsync(_token).Forget(); return; }
+            await PlayLogoAsync(_token);
             if (_playPinAnim)
             {
                 // 핀이 처음 꽂히는 연출 → 핀 꽂힌 반복 배경
-                yield return PlayClip(_pinPlant, false, 0f);
-                yield return WaitClipEnd();
+                await PlayClipAsync(_pinPlant, false, 0f, _token);
+                await WaitClipEndAsync(_token);
                 PlayerPrefs.SetInt(K_PIN_SHOWN_EGYPT, 1); PlayerPrefs.Save();
-                yield return PlayClip(_loopPin, true, _crossFade);
+                await PlayClipAsync(_loopPin, true, _crossFade, _token);
             }
-            else yield return PlayClip(_entered ? _loopPin : _loopNoPin, true, 0f);
-            yield return Fade(_black, 1f, 0f, 0.6f);
-            yield return FadeGroup(_menuGroup, 0f, 1f, 0.5f);
+            else await PlayClipAsync(_entered ? _loopPin : _loopNoPin, true, 0f, _token);
+            await FadeAsync(_black, 1f, 0f, 0.6f, _token);
+            await FadeGroupAsync(_menuGroup, 0f, 1f, 0.5f, _token);
             _menuGroup.interactable = true;
         }
 
-        private IEnumerator StartGame()
+        private async UniTask StartGameAsync(CancellationToken _token)
         {
             _busy = true; _menuGroup.interactable = false;
-            StartCoroutine(FadeGroup(_menuGroup, 1f, 0f, 0.35f));
-            StartCoroutine(FadeGroup(_titleGroup, 1f, 0f, 0.5f));      // 제목 로고도 함께 사라짐(도감 안으로 들어가면 없어야 함)
+            FadeGroupAsync(_menuGroup, 1f, 0f, 0.35f, _token).Forget();
+            FadeGroupAsync(_titleGroup, 1f, 0f, 0.5f, _token).Forget();      // 제목 로고도 함께 사라짐(도감 안으로 들어가면 없어야 함)
             // 도감으로 줌인 → 책이 펼쳐지며 화면을 채움
             if (!_testFromIntroEnd)
             {
-                yield return PlayClip(_entered ? _zoomPin : _zoomNoPin, false, _crossFade);
-                yield return WaitClipEnd();
+                await PlayClipAsync(_entered ? _zoomPin : _zoomNoPin, false, _crossFade, _token);
+                await WaitClipEndAsync(_token);
             }
             // 펼친 도감에서 인트로(줌인 마지막 장면과 인트로 첫 장면이 같은 책이라 바로 이어짐)
             var _intro = GameLanguage.IsKorean ? _introKo : _introEn;
             if (_intro)
             {
-                yield return PlayClip(_intro, false, 0.2f);
+                await PlayClipAsync(_intro, false, 0.2f, _token);
                 var _p = _vp[_front];
                 long _hold = (long)_p.frameCount - HOLD_BEFORE_END;      // 영상 끝의 암전 직전 장면에서 멈춤
                 // 건너뛰기는 우측 책갈피(Skip)를 눌렀을 때만 — 아무 데나 클릭해도 넘어가지 않음
-                _skipIntro = _testFromIntroEnd;
-                ShowBookmark(true);
+                _skipIntro = _testFromIntroEnd; _allSkip = false;
+                ShowBookmark(true); ShowAllSkip(true);
                 while (_p.isPlaying && _p.frame < _hold)
                 {
-                    if (_skipIntro)                                        // 마지막 장면(나레이션이 다 쌓인 쪽)으로 — 소리도 같은 자리로
+                    var _kbEsc = Keyboard.current;
+                    if (_kbEsc != null && _kbEsc.escapeKey.wasPressedThisFrame) SkipAll();
+                    if (_skipIntro)                                       // 마지막 장면(나레이션이 다 쌓인 쪽)으로 — 소리도 같은 자리로
                     {
                         _p.frame = _hold;
                         var _src = _as[_front]; if (_src.clip) _src.time = Mathf.Clamp(_hold / (float)_p.frameRate, 0f, _src.clip.length - 0.01f);
                         break;
                     }
-                    yield return null;
+                    await NextFrame(_token);
                 }
                 _p.Pause();
-                for (int i = 0; i < 3; i++) yield return null;           // 건너뛴 장면이 그려질 때까지
-                // 시네마틱이 끝나면 같은 책갈피가 '다음 장' 버튼으로 바뀜 → 누르면 조작법 페이지 → '모험 시작'
-                yield return WaitBookmark(1, false);
-                while (true)
+                for (int i = 0; i < 3; i++) await NextFrame(_token);           // 건너뛴 장면이 그려질 때까지
+                // 시네마틱이 끝나면 같은 책갈피가 '다음 장' 버튼으로 바뀜 → 조작법 → 튜토리얼 → 마지막 장에서 '모험 시작'
+                // 장 번호: 0 = 이야기, 1 = 조작법, 2~ = 튜토리얼. 우측 = 다음 장, 좌측 = 이전 장
+                int _page = 0, _lastPage = _pageGroups.Count;
+                _skipTutorial = false;
+                while (!_allSkip)                                                // 모두 건너뛰기: 이야기 장에서 바로 게임으로
                 {
-                    yield return TurnToControls();
-                    // 조작법 페이지: 우측 = 모험 시작, 좌측 = 이전 장(이야기 페이지로 되돌아감)
-                    yield return WaitBookmark(2, true);
-                    if (!_choseBack) break;
-                    yield return TurnBackToStory();
-                    yield return WaitBookmark(1, false);
+                    ShowAllSkip(_page == 0);
+                    ShowSkip(_page >= 1 && _page < _lastPage);                   // 마지막 장은 '모험 시작'이 있으므로 건너뛰기 없음
+                    await WaitBookmarkAsync(_page == _lastPage ? 2 : 1, _page > 0, _token);
+                    ShowSkip(false);
+                    if (_skipTutorial) break;                                    // 남은 장을 건너뛰고 바로 게임으로
+                    if (_choseBack)
+                    {
+                        if (_page == 1) await TurnBackToStoryAsync(_token);
+                        else await TurnBetweenAsync(_pageGroups[_page - 1], _pageGroups[_page - 2], false, _token);
+                        _page--;
+                    }
+                    else if (_page == _lastPage) break;
+                    else
+                    {
+                        if (_page == 0) await TurnToControlsAsync(_token);
+                        else await TurnBetweenAsync(_pageGroups[_page - 1], _pageGroups[_page], true, _token);
+                        _page++;
+                    }
                 }
-                ShowBookmark(false);
-                // 조작법 글자가 걷힘 → (게임 씬으로) 도감이 줌아웃되며 뒤로 게임 화면, 책이 덮여 아래로 내려감
-                yield return FadeGroup(_ctrlGroup, 1f, 0f, 0.45f);
+                ShowBookmark(false); ShowAllSkip(false);
+                // 지금 장 글자가 걷힘 → (게임 씬으로) 도감이 줌아웃되며 뒤로 게임 화면, 책이 덮여 아래로 내려감
+                if (_page > 0) await FadeGroupAsync(_pageGroups[_page - 1], 1f, 0f, 0.45f, _token);
+                else
+                {
+                    // 이야기 장(영상)에서 바로: 빈 도감을 위에 겹쳐 그림·글자가 걷히는 것처럼
+                    foreach (var _pg in new[] { _oldLeft, _oldRight, _flipFront, _flipBack }) _pg.gameObject.SetActive(false);
+                    foreach (var _g in _pageGroups) _g.alpha = 0f;
+                    _newSpread.texture = _bookSpread; SetAlpha(_newSpread, 0f);
+                    _book.gameObject.SetActive(true);
+                    await FadeAsync(_newSpread, 0f, 1f, 0.45f, _token);
+                }
                 foreach (var _src in _as) if (_src && _src.isPlaying) _src.DOFade(0f, 0.5f).SetUpdate(true).SetLink(gameObject);   // 게임으로 넘어가며 소리도 잦아듦
                 if (_loopSrc && _loopSrc.isPlaying) _loopSrc.DOFade(0f, 0.5f).SetUpdate(true).SetLink(gameObject);
                 BookToGameTransition.Create(_bookSpread);
                 LoadGameScene();
-                yield break;
+                return;
             }
             // 인트로 영상이 없을 때: 그냥 어두워졌다가 게임 씬
-            yield return Fade(_black, 0f, 1f, 0.6f);
+            await FadeAsync(_black, 0f, 1f, 0.6f, _token);
             LoadGameScene();
         }
 
         // ================= 책장 넘김 · 조작법 페이지 =================
         private const int HOLD_BEFORE_END = 16;                 // 인트로 영상은 끝 12프레임이 암전 → 그 직전에 멈춤
-        private static readonly Color INK = new Color32(44, 26, 10, 235);
+        private static readonly Color INK = new Color32(30, 16, 4, 255);   // 밝게 보정한 종이 위에서 잘 읽히게 진하고 불투명하게
+
+        // ---- 도감 종이를 밝은 양피지로 보정(스토리 영상·조작법·튜토리얼 바탕). ESC 설정창 도감과 같은 색감 ----
+        private Material _parchment;
+        private Material Parchment() { if (!_parchment) _parchment = NewParchment("MainMenu_Parchment"); return _parchment; }
+
+        /// <summary>도감 페이지만 밝게 보정하는 재질(표지·책상은 그대로). Assets/Art/Resources/UI/MainMenu/</summary>
+        internal static Material NewParchment(string _name)
+        {
+            var _sh = Resources.Load<Shader>("UI/MainMenu/BookParchment");
+            if (!_sh) return null;
+            var _m = new Material(_sh) { name = _name };
+            _m.SetTexture("_Mask", Resources.Load<Texture2D>("UI/MainMenu/BookPageMask"));
+            return _m;
+        }
+
+        // ---- 책장 넘길 때 소리 ----
+        private AudioClip _pageClip;
+        private void PlayPageTurn()
+        {
+            if (!_pageClip) _pageClip = Resources.Load<AudioClip>("UI/Settings/UI_PageTurn");
+            if (_pageClip && SoundManager.Instance) SoundManager.Instance.PlaySfx(_pageClip, 0.9f);
+        }
         private const float SPINE_X = 960f;                     // 펼친 책의 가운데(책등) — 영상·책 그림 기준 px
 
         /// <summary>우측 페이지 하단에 넘김 표시(살짝 숨 쉬듯 깜빡임)를 띄우고 클릭·키를 기다린다</summary>
-        private IEnumerator WaitPageTurn(string _label)
+        private async UniTask WaitPageTurnAsync(string _label, CancellationToken _token)
         {
             _turnLabel.text = _label + "  ›";
             ApplyFont(_turnLabel, 26f);
             _turnGroup.gameObject.SetActive(true);
-            yield return FadeGroup(_turnGroup, 0f, 1f, 0.4f);
+            await FadeGroupAsync(_turnGroup, 0f, 1f, 0.4f, _token);
             _skipRequested = false;
             // 숨 쉬듯 깜빡임(1 ↔ 0.6 왕복)
             var _pulse = _turnGroup.DOFade(0.6f, 0.98f).SetEase(Ease.InOutSine).SetLoops(-1, LoopType.Yoyo).SetUpdate(true).SetLink(_turnGroup.gameObject);
-            while (!_skipRequested) yield return null;
+            while (!_skipRequested) await NextFrame(_token);
             _pulse.Kill();
             _skipRequested = false;
-            yield return FadeGroup(_turnGroup, _turnGroup.alpha, 0f, 0.15f);
+            await FadeGroupAsync(_turnGroup, _turnGroup.alpha, 0f, 0.15f, _token);
             _turnGroup.gameObject.SetActive(false);
         }
 
         /// <summary>오른쪽 페이지가 책등을 축으로 넘어가며 조작법 펼침면이 나타난다</summary>
-        private IEnumerator TurnToControls()
+        private async UniTask TurnToControlsAsync(CancellationToken _token)
         {
             // 지금 화면(인트로 마지막 장면)을 멈춰 둔 사본
             if (_snapRT == null)
@@ -251,34 +352,60 @@ namespace HistoryCrash.UI
             SetFlip(_flipFront, 1f, 1f); SetFlip(_flipBack, 0f, 1f);
             _flipBack.gameObject.SetActive(false);
             // 책장 넘김(DOTween): 앞면이 책등 쪽으로 눕고(가속) → 뒷면이 왼쪽으로 내려앉음(감속)
+            PlayPageTurn();
             var _flip = DOTween.Sequence().SetUpdate(true).SetLink(gameObject);
             _flip.Append(DOVirtual.Float(1f, 0f, 0.425f, _k => SetFlip(_flipFront, _k, Mathf.Lerp(0.55f, 1f, _k))).SetEase(Ease.InSine));
             _flip.AppendCallback(() => { _flipFront.gameObject.SetActive(false); _flipBack.gameObject.SetActive(true); });
             _flip.Append(DOVirtual.Float(0f, 1f, 0.425f, _k => SetFlip(_flipBack, _k, Mathf.Lerp(0.55f, 1f, _k))).SetEase(Ease.OutSine));
-            yield return _flip.WaitForCompletion();
+            await WaitTween(_flip, _token);
             _oldLeft.gameObject.SetActive(false); _flipFront.gameObject.SetActive(false); _flipBack.gameObject.SetActive(false);
             // 영상 레이어는 이제 안 씀
             _vp[_front].Stop(); SetAlpha(_vimg[_front], 0f);
             // 조작법 글자가 잉크처럼 번져 나타남
-            yield return FadeGroup(_ctrlGroup, 0f, 1f, 0.6f);
+            await FadeGroupAsync(_ctrlGroup, 0f, 1f, 0.6f, _token);
         }
 
         /// <summary>왼쪽 페이지가 책등을 축으로 오른쪽으로 넘어가며 이야기(인트로 마지막) 펼침면으로 되돌아감</summary>
-        private IEnumerator TurnBackToStory()
+        private async UniTask TurnBackToStoryAsync(CancellationToken _token)
         {
-            yield return FadeGroup(_ctrlGroup, 1f, 0f, 0.3f);
+            await FadeGroupAsync(_ctrlGroup, 1f, 0f, 0.3f, _token);
             _newSpread.texture = _snapRT;                                   // 밑: 이야기 펼침면
             _oldRight.texture = _bookSpread; _oldRight.gameObject.SetActive(true);   // 오른쪽은 넘어온 장이 덮을 때까지 지금 페이지
             _oldLeft.gameObject.SetActive(false);
             _flipBack.texture = _bookSpread; _flipFront.texture = _snapRT;
             _flipBack.gameObject.SetActive(true); _flipFront.gameObject.SetActive(false);
             SetFlip(_flipBack, 1f, 1f); SetFlip(_flipFront, 0f, 1f);
+            PlayPageTurn();
             var _flip = DOTween.Sequence().SetUpdate(true).SetLink(gameObject);
             _flip.Append(DOVirtual.Float(1f, 0f, 0.425f, _k => SetFlip(_flipBack, _k, Mathf.Lerp(0.55f, 1f, _k))).SetEase(Ease.InSine));
             _flip.AppendCallback(() => { _flipBack.gameObject.SetActive(false); _flipFront.gameObject.SetActive(true); });
             _flip.Append(DOVirtual.Float(0f, 1f, 0.425f, _k => SetFlip(_flipFront, _k, Mathf.Lerp(0.55f, 1f, _k))).SetEase(Ease.OutSine));
-            yield return _flip.WaitForCompletion();
+            await WaitTween(_flip, _token);
             _oldRight.gameObject.SetActive(false); _flipFront.gameObject.SetActive(false); _flipBack.gameObject.SetActive(false);
+        }
+
+        /// <summary>빈 도감 펼침면끼리 책장을 넘김(조작법 ↔ 튜토리얼, 튜토리얼끼리). 글자·그림은 넘기기 전에 걷히고 넘긴 뒤 번져 나타남</summary>
+        // 튜토리얼은 빠르게 넘겨 볼 수 있게 이야기·조작법 넘김보다 짧게
+        private const float QUICK_FADE_OUT = 0.15f, QUICK_FLIP_HALF = 0.28f, QUICK_FADE_IN = 0.3f;
+
+        private async UniTask TurnBetweenAsync(CanvasGroup _from, CanvasGroup _to, bool _forward, CancellationToken _token)
+        {
+            await FadeGroupAsync(_from, 1f, 0f, QUICK_FADE_OUT, _token);
+            _newSpread.texture = _bookSpread; _flipFront.texture = _bookSpread; _flipBack.texture = _bookSpread;
+            _oldLeft.gameObject.SetActive(false); _oldRight.gameObject.SetActive(false);
+            // 앞으로: 오른쪽 장이 책등 쪽으로 눕고 왼쪽에 내려앉음 / 뒤로: 반대
+            var _first = _forward ? _flipFront : _flipBack;
+            var _second = _forward ? _flipBack : _flipFront;
+            _first.gameObject.SetActive(true); _second.gameObject.SetActive(false);
+            SetFlip(_first, 1f, 1f); SetFlip(_second, 0f, 1f);
+            PlayPageTurn();
+            var _flip = DOTween.Sequence().SetUpdate(true).SetLink(gameObject);
+            _flip.Append(DOVirtual.Float(1f, 0f, QUICK_FLIP_HALF, _k => SetFlip(_first, _k, Mathf.Lerp(0.55f, 1f, _k))).SetEase(Ease.InSine));
+            _flip.AppendCallback(() => { _first.gameObject.SetActive(false); _second.gameObject.SetActive(true); });
+            _flip.Append(DOVirtual.Float(0f, 1f, QUICK_FLIP_HALF, _k => SetFlip(_second, _k, Mathf.Lerp(0.55f, 1f, _k))).SetEase(Ease.OutSine));
+            await WaitTween(_flip, _token);
+            _second.gameObject.SetActive(false);
+            await FadeGroupAsync(_to, 0f, 1f, QUICK_FADE_IN, _token);
         }
 
         private static void SetFlip(RawImage _img, float _scaleX, float _shade)
@@ -300,6 +427,8 @@ namespace HistoryCrash.UI
             _oldRight.gameObject.SetActive(false);
             _flipFront = Raw("FlipFront", _book, new Rect(0.5f, 0f, 0.5f, 1f), new Vector2(0.5f, 0f), new Vector2(1f, 1f), new Vector2(0f, 0.5f));   // 책등(왼쪽 끝)을 축으로
             _flipBack = Raw("FlipBack", _book, new Rect(0f, 0f, 0.5f, 1f), new Vector2(0f, 0f), new Vector2(0.5f, 1f), new Vector2(1f, 0.5f));      // 책등(오른쪽 끝)을 축으로
+            // 펼침면(빈 도감·이야기 마지막 장면 사본)은 모두 밝은 양피지로 보정해서 보여 줌
+            foreach (var _pg in new[] { _newSpread, _oldLeft, _oldRight, _flipFront, _flipBack }) _pg.material = Parchment();
 
             // 조작법: 왼쪽 = 이동·시점, 오른쪽 = 전투·기타 (목록은 ESC 설정창 Controls와 같은 PauseSettingsUI.CONTROLS)
             _ctrlGroup = new GameObject("Controls", typeof(RectTransform), typeof(CanvasGroup)).GetComponent<CanvasGroup>();
@@ -310,6 +439,17 @@ namespace HistoryCrash.UI
             int[] _left = { 0, 1, 2, 5, 6, 7 }, _right = { 3, 4, 8, 9, 10, 11 };
             ControlRows(_cr, _left, 372f, 802f, _ko);
             ControlRows(_cr, _right, 1123f, 1553f, _ko);
+            _pageGroups.Clear(); _pageGroups.Add(_ctrlGroup);
+            if (_tutorialPages != null)
+                for (int i = 0; i < _tutorialPages.Length; i++) _pageGroups.Add(BuildTutorialPage(_book, _tutorialPages[i], i));
+
+            // 튜토리얼 건너뛰기(오른쪽 페이지 아래 잉크 글씨, 누르거나 Esc)
+            _skipGroup = new GameObject("TutorialSkip", typeof(RectTransform), typeof(CanvasGroup)).GetComponent<CanvasGroup>();
+            var _sr = (RectTransform)_skipGroup.transform; _sr.SetParent(_book, false); Stretch(_sr);
+            var _skip = BookText(_sr, GameLanguage.T("튜토리얼 건너뛰기 (Esc)  »", "Skip tutorial (Esc)  »"), new Vector2(1590f, 955f), 27f, TextAlignmentOptions.MidlineRight, 460f);
+            ApplyFont(_skip, 27f); _skip.raycastTarget = true;
+            var _skipBm = _skip.gameObject.AddComponent<MainMenuBookmark>(); _skipBm.Clicked = SkipTutorial; _skipBm.Hovered = PlayHover;
+            ShowSkip(false);
 
             // 넘김 표시(우측 페이지 하단)
             _turnGroup = new GameObject("PageTurnHint", typeof(RectTransform), typeof(CanvasGroup)).GetComponent<CanvasGroup>();
@@ -319,10 +459,51 @@ namespace HistoryCrash.UI
             _book.gameObject.SetActive(false);
         }
 
+        // 튜토리얼 한 장: 조작법 페이지와 같은 칸(왼쪽 372~802, 오른쪽 1123~1553, 제목 줄 242)에 맞춤
+        // 왼쪽 페이지 그림 칸(왼쪽 위 0,0): 도감에 그려진 안쪽 틀(x 327~843, y 315~908) 안에 여백 20px을 두고 가운데
+        private static readonly Rect TUTORIAL_IMAGE_PX = new Rect(347f, 335f, 476f, 553f);
+        private const float TUTORIAL_FRAME = 4f;                                               // 그림 둘레 잉크 테두리 두께
+
+        private CanvasGroup BuildTutorialPage(RectTransform _parent, MainMenuTutorialPage _page, int _index)
+        {
+            var _group = new GameObject("Tutorial_" + (_index + 1), typeof(RectTransform), typeof(CanvasGroup)).GetComponent<CanvasGroup>();
+            var _r = (RectTransform)_group.transform; _r.SetParent(_parent, false); Stretch(_r);
+            _group.alpha = 0f; _group.interactable = _group.blocksRaycasts = false;
+
+            // 왼쪽: 그림(비율 유지해 칸 안에 맞춤) + 잉크 테두리
+            var _tex = string.IsNullOrEmpty(_page.ImagePath) ? null : Resources.Load<Texture2D>(_page.ImagePath);
+            if (_tex)
+            {
+                var _box = new GameObject("ImageBox", typeof(RectTransform)).GetComponent<RectTransform>();
+                _box.SetParent(_r, false);
+                _box.anchorMin = new Vector2(TUTORIAL_IMAGE_PX.xMin / 1920f, 1f - TUTORIAL_IMAGE_PX.yMax / 1080f);
+                _box.anchorMax = new Vector2(TUTORIAL_IMAGE_PX.xMax / 1920f, 1f - TUTORIAL_IMAGE_PX.yMin / 1080f);
+                _box.offsetMin = _box.offsetMax = Vector2.zero;
+                var _frame = new GameObject("Frame", typeof(RectTransform), typeof(Image), typeof(AspectRatioFitter));
+                _frame.transform.SetParent(_box, false);
+                var _fit = _frame.GetComponent<AspectRatioFitter>(); _fit.aspectMode = AspectRatioFitter.AspectMode.FitInParent; _fit.aspectRatio = (float)_tex.width / _tex.height;
+                var _fi = _frame.GetComponent<Image>(); _fi.color = new Color(INK.r, INK.g, INK.b, 0.8f); _fi.raycastTarget = false;
+                var _img = Raw("Image", (RectTransform)_frame.transform, new Rect(0f, 0f, 1f, 1f), Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f));
+                _img.rectTransform.offsetMin = new Vector2(TUTORIAL_FRAME, TUTORIAL_FRAME); _img.rectTransform.offsetMax = new Vector2(-TUTORIAL_FRAME, -TUTORIAL_FRAME);
+                _img.texture = _tex;
+            }
+            else Debug.LogWarning($"[MainMenu] 튜토리얼 그림을 찾지 못했습니다: Resources/{_page.ImagePath}");
+
+            // 오른쪽: 제목 + 설명(줄바꿈) + 쪽 번호
+            PageTitle(_r, _page.Title, 1085f);
+            var _body = BookText(_r, _page.Body, new Vector2(1123f, 345f), 31f, TextAlignmentOptions.TopLeft, 430f);
+            _body.rectTransform.pivot = new Vector2(0f, 1f); _body.rectTransform.sizeDelta = new Vector2(430f, 560f);
+            _body.textWrappingMode = TextWrappingModes.Normal; _body.lineSpacing = 12f;
+            ApplyFont(_body, 31f);
+            var _num = BookText(_r, $"{_index + 1} / {_tutorialPages.Length}", new Vector2(1338f, 880f), 22f, TextAlignmentOptions.Center, 200f);
+            _num.color = new Color(INK.r, INK.g, INK.b, 0.85f);
+            return _group;
+        }
+
         private void PageTitle(RectTransform _p, string _s, float _x)
         {
-            var _t = BookText(_p, _s, new Vector2(_x + 250f, 242f), 30f, TextAlignmentOptions.Center, 500f);
-            ApplyFont(_t, 30f);
+            var _t = BookText(_p, _s, new Vector2(_x + 250f, 242f), 34f, TextAlignmentOptions.Center, 500f);
+            ApplyFont(_t, 34f);
         }
 
         private void ControlRows(RectTransform _p, int[] _idx, float _x0, float _x1, bool _ko)
@@ -331,12 +512,12 @@ namespace HistoryCrash.UI
             for (int i = 0; i < _idx.Length; i++)
             {
                 float _y = 380f + i * 84f;
-                var _k = BookText(_p, C[_idx[i], _ko ? 2 : 0], new Vector2(_x0, _y), 28f, TextAlignmentOptions.MidlineLeft, 220f);
-                var _d = BookText(_p, C[_idx[i], _ko ? 3 : 1], new Vector2(_x1, _y), 26f, TextAlignmentOptions.MidlineRight, 260f);
-                ApplyFont(_k, 28f); ApplyFont(_d, 26f);
+                var _k = BookText(_p, C[_idx[i], _ko ? 2 : 0], new Vector2(_x0, _y), 31f, TextAlignmentOptions.MidlineLeft, 220f);
+                var _d = BookText(_p, C[_idx[i], _ko ? 3 : 1], new Vector2(_x1, _y), 29f, TextAlignmentOptions.MidlineRight, 260f);
+                ApplyFont(_k, 31f); ApplyFont(_d, 29f);
                 if (i < _idx.Length - 1)
                 {
-                    var _ln = MakeRect(_p, "Line", new Vector2(_x0, _y + 42f), new Vector2(_x1 - _x0, 1.2f), new Color(INK.r, INK.g, INK.b, 0.28f), 0f, new Vector2(0f, 0.5f));
+                    var _ln = MakeRect(_p, "Line", new Vector2(_x0, _y + 42f), new Vector2(_x1 - _x0, 1.2f), new Color(INK.r, INK.g, INK.b, 0.4f), 0f, new Vector2(0f, 0.5f));
                     _ln.rectTransform.anchorMin = _ln.rectTransform.anchorMax = new Vector2(0f, 1f);
                 }
             }
@@ -404,6 +585,15 @@ namespace HistoryCrash.UI
                 if ((_kb != null && (_kb.anyKey.wasPressedThisFrame)) || (_ms != null && _ms.leftButton.wasPressedThisFrame)) _skipRequested = true;
                 return;
             }
+            if (_creditsOpen)
+            {
+                // Esc = 닫기 / 클릭(누르고 있는 동안)·Space = 빨리 넘기기. 연 클릭이 그대로 빨리 넘기기가 되지 않게 잠깐 기다림
+                bool _ready = Time.unscaledTime - _creditsOpenedAt > CREDIT_INPUT_GUARD;
+                if (_ready && _kb != null && _kb.escapeKey.wasPressedThisFrame) { CloseCredits(); return; }
+                bool _fast = _ready && ((_ms != null && _ms.leftButton.isPressed) || (_kb != null && _kb.spaceKey.isPressed));
+                if (_creditRoll != null && _creditRoll.IsActive()) _creditRoll.timeScale = _fast ? CREDIT_FAST : 1f;
+                return;
+            }
             if (!_menuGroup.interactable || PauseSettingsUI.IsOpen || _kb == null) return;
             if (_kb.upArrowKey.wasPressedThisFrame || _kb.wKey.wasPressedThisFrame) Select((_sel + _items.Count - 1) % _items.Count);
             if (_kb.downArrowKey.wasPressedThisFrame || _kb.sKey.wasPressedThisFrame) Select((_sel + 1) % _items.Count);
@@ -416,24 +606,47 @@ namespace HistoryCrash.UI
         /// <summary>우측 책갈피: 시네마틱 중이면 건너뛰기, 끝난 뒤면 다음 장/모험 시작</summary>
         public void SkipIntro() { if (_bookmarkGroup && _bookmarkGroup.interactable) { _skipIntro = true; _bookmarkClicked = true; _choseBack = false; } }
 
+        /// <summary>튜토리얼 건너뛰기: 남은 장을 넘기지 않고 바로 게임 씬으로</summary>
+        public void SkipTutorial() { if (_skipGroup && _skipGroup.interactable) { _skipTutorial = true; _bookmarkClicked = true; _choseBack = false; } }
+
+        /// <summary>모두 건너뛰기: 이야기·조작법·튜토리얼을 모두 넘기고 바로 게임 씬으로(이야기 장에서만 보임)</summary>
+        public void SkipAll() { if (_allSkipGroup && _allSkipGroup.interactable) { _allSkip = _skipIntro = _skipTutorial = true; _bookmarkClicked = true; _choseBack = false; } }
+
+        private void ShowAllSkip(bool _on)
+        {
+            if (!_allSkipGroup) return;
+            _allSkipGroup.DOKill();
+            _allSkipGroup.interactable = _allSkipGroup.blocksRaycasts = _on;
+            _allSkipGroup.DOFade(_on ? 1f : 0f, 0.25f).SetUpdate(true).SetLink(_allSkipGroup.gameObject);
+        }
+
+        private void ShowSkip(bool _on)
+        {
+            if (!_skipGroup) return;
+            _skipGroup.alpha = _on ? 1f : 0f;
+            _skipGroup.interactable = _skipGroup.blocksRaycasts = _on;
+        }
+
         /// <summary>좌측 책갈피: 앞 장(이야기 페이지)으로 되돌아감</summary>
         public void GoBackPage() { if (_backGroup && _backGroup.interactable) { _bookmarkClicked = true; _choseBack = true; } }
 
         /// <summary>우측 책갈피 글씨를 바꾸고 누를 때까지 기다림(깜빡임·번짐 같은 연출 없음). 키보드 Enter·Space·→ = 다음, ← = 이전</summary>
-        private IEnumerator WaitBookmark(int _which, bool _allowBack)
+        private async UniTask WaitBookmarkAsync(int _which, bool _allowBack, CancellationToken _token)
         {
-            if (!_bookmarkGroup) yield break;
+            if (!_bookmarkGroup) return;
             if (!_bookmarkGroup.gameObject.activeSelf) ShowBookmark(true);
             ShowBack(_allowBack);
             SetNextRibbon(_which);
-            yield return null;                                             // 누른 클릭이 다음 단계로 바로 이어지지 않게 한 프레임
+            await NextFrame(_token);                                             // 누른 클릭이 다음 단계로 바로 이어지지 않게 한 프레임
             _bookmarkClicked = false; _choseBack = false;
             while (!_bookmarkClicked)
             {
                 var _kb = Keyboard.current;
                 if (_kb != null && (_kb.enterKey.wasPressedThisFrame || _kb.numpadEnterKey.wasPressedThisFrame || _kb.spaceKey.wasPressedThisFrame || _kb.rightArrowKey.wasPressedThisFrame)) { _choseBack = false; break; }
                 if (_allowBack && _kb != null && _kb.leftArrowKey.wasPressedThisFrame) { _choseBack = true; break; }
-                yield return null;
+                if (_kb != null && _kb.escapeKey.wasPressedThisFrame && _skipGroup && _skipGroup.interactable) { _skipTutorial = true; _choseBack = false; break; }
+                if (_kb != null && _kb.escapeKey.wasPressedThisFrame && _allSkipGroup && _allSkipGroup.interactable) { SkipAll(); break; }
+                await NextFrame(_token);
             }
             _bookmarkClicked = false;
             ShowBack(false);
@@ -459,6 +672,14 @@ namespace HistoryCrash.UI
             SetNextRibbon(0);
             _backGroup.alpha = 0f; _backGroup.interactable = _backGroup.blocksRaycasts = false;
 
+            // 모두 건너뛰기(우측 페이지 아래 잉크 글씨, 누르거나 Esc) — 이야기 장에서만
+            _allSkipGroup = new GameObject("AllSkip", typeof(RectTransform), typeof(CanvasGroup)).GetComponent<CanvasGroup>();
+            var _ar = (RectTransform)_allSkipGroup.transform; _ar.SetParent(_box, false); Stretch(_ar);
+            var _all = BookText(_ar, GameLanguage.T("모두 건너뛰기 (Esc)  »", "Skip all (Esc)  »"), new Vector2(1590f, 955f), 27f, TextAlignmentOptions.MidlineRight, 460f);
+            ApplyFont(_all, 27f); _all.raycastTarget = true;
+            var _allBm = _all.gameObject.AddComponent<MainMenuBookmark>(); _allBm.Clicked = SkipAll; _allBm.Hovered = PlayHover;
+            _allSkipGroup.alpha = 0f; _allSkipGroup.interactable = _allSkipGroup.blocksRaycasts = false;
+
             _bookmarkGroup.alpha = 0f; _bookmarkGroup.interactable = _bookmarkGroup.blocksRaycasts = false;
             _box.gameObject.SetActive(false);
         }
@@ -473,7 +694,7 @@ namespace HistoryCrash.UI
             _r.offsetMin = _r.offsetMax = Vector2.zero;
             var _img = _go.GetComponent<RawImage>(); _img.raycastTarget = true;
             _group = _go.GetComponent<CanvasGroup>();
-            var _bm = _go.AddComponent<MainMenuBookmark>(); _bm.Clicked = _onClick;
+            var _bm = _go.AddComponent<MainMenuBookmark>(); _bm.Clicked = _onClick; _bm.Hovered = PlayHover;
             return _img;
         }
 
@@ -528,15 +749,26 @@ namespace HistoryCrash.UI
         public void Select(int _i)
         {
             if (_busy || PauseSettingsUI.IsOpen || _i < 0 || _i >= _itemTexts.Count) return;
+            if (_i != _sel && _menuGroup && _menuGroup.interactable) PlayHover();   // 마우스·방향키로 고른 것이 바뀔 때만
             _sel = _i;
             for (int k = 0; k < _itemTexts.Count; k++)
             {
                 bool _on = k == _sel;
-                _itemTexts[k].color = _on ? FACE : new Color(FACE.r, FACE.g, FACE.b, 185f / 255f);
-                _itemTexts[k].outlineColor = new Color(EDGE.r, EDGE.g, EDGE.b, _on ? 200f / 255f : 140f / 255f);
+                // 고른 것: 밝은 금빛 + 살짝 크게 / 나머지: 조금 어둡게 → 한눈에 구분
+                _itemTexts[k].color = _on ? FACE_SEL : new Color(FACE.r, FACE.g, FACE.b, 200f / 255f);
+                _itemTexts[k].outlineColor = new Color(EDGE.r, EDGE.g, EDGE.b, _on ? 1f : 200f / 255f);
+                _itemTexts[k].rectTransform.localScale = Vector3.one * (_on ? 1.08f : 1f);
             }
             var _r = _itemTexts[_sel].rectTransform;
             _selMark.anchoredPosition = new Vector2(_r.anchoredPosition.x - _menuSize * 0.55f, _r.anchoredPosition.y);
+        }
+
+        // ---- 마우스를 올렸을 때 소리(ESC 설정창과 같은 소리) ----
+        private AudioClip _hoverClip;
+        private void PlayHover()
+        {
+            if (!_hoverClip) _hoverClip = Resources.Load<AudioClip>("UI/Settings/UI_Settings_Hover");
+            if (_hoverClip && SoundManager.Instance) SoundManager.Instance.PlaySfx(_hoverClip, 0.6f);
         }
 
         public void Submit(int _i)
@@ -545,9 +777,10 @@ namespace HistoryCrash.UI
             Select(_i);
             switch (_items[_i])
             {
-                case "Continue": StartCoroutine(StartGame()); break;
-                case "Start": StartCoroutine(StartGame()); break;   // 새 게임: 저장 초기화는 세이브 시스템이 생기면 여기서
+                case "Continue": StartGameAsync(destroyCancellationToken).Forget(); break;
+                case "Start": StartGameAsync(destroyCancellationToken).Forget(); break;   // 새 게임: 저장 초기화는 세이브 시스템이 생기면 여기서
                 case "Settings": if (_settings) _settings.Open(); break;
+                case "Credits": OpenCredits(); break;
                 case "Quit":
 #if UNITY_EDITOR
                     UnityEditor.EditorApplication.isPlaying = false;
@@ -556,6 +789,101 @@ namespace HistoryCrash.UI
 #endif
                     break;
             }
+        }
+
+        // ================= 크레딧 =================
+        // 메뉴·제목이 흐려지고 화면이 어두워진 뒤, 제작진 글이 아래에서 위로 일정한 속도로 올라감(DOTween). 끝나면 메뉴로 돌아옴
+        private const float CREDIT_INPUT_GUARD = 0.3f;   // 연 직후 이 시간(초) 동안은 닫는 입력을 받지 않음
+        private const float CREDIT_FADE = 0.4f;
+        private const float CREDIT_FAST = 5f;            // 클릭·Space를 누르고 있는 동안 올라가는 배속
+        private CanvasGroup _creditGroup;
+        private RectTransform _creditContent;
+        private float _creditHeight;
+        private bool _creditsOpen;
+        private float _creditsOpenedAt;
+        private Tween _creditRoll;
+
+        private void BuildCredits(RectTransform _root)
+        {
+            var _box = new GameObject("Credits", typeof(RectTransform), typeof(CanvasGroup)).GetComponent<RectTransform>();
+            _box.SetParent(_root, false); Stretch(_box);
+            _creditGroup = _box.GetComponent<CanvasGroup>();
+            _creditGroup.alpha = 0f; _creditGroup.interactable = _creditGroup.blocksRaycasts = false;
+            var _dim = MakeRect(_box, "Dim", Vector2.zero, Vector2.zero, new Color(0f, 0f, 0f, 0.72f), 0f, new Vector2(0.5f, 0.5f));
+            Stretch(_dim.rectTransform); _dim.raycastTarget = true;   // 크레딧 중에는 뒤의 메뉴가 눌리지 않게
+
+            // 글 묶음: 위쪽 가운데가 기준. 화면 아래 끝에서 시작해 위로 올라감
+            _creditContent = new GameObject("Roll", typeof(RectTransform)).GetComponent<RectTransform>();
+            _creditContent.SetParent(_box, false);
+            _creditContent.anchorMin = _creditContent.anchorMax = new Vector2(0.5f, 0f); _creditContent.pivot = new Vector2(0.5f, 1f);
+
+            float _y = 0f;
+            CreditLine("History Crash", ref _y, 96f, 1f, true, 6f);
+            if (!string.IsNullOrEmpty(_teamName)) CreditLine(_teamName, ref _y, 40f, 0.85f, false, 0f);
+            _y += 70f;
+            foreach (var _c in _credits)
+            {
+                if (_c == null) continue;
+                CreditLine(_c.Role, ref _y, 34f, 0.7f, false, 10f);
+                if (_c.Names != null) foreach (var _n in _c.Names) CreditLine(_n, ref _y, 46f, 1f, false, 4f);
+                _y += 46f;
+            }
+            _y += 60f;
+            if (_creditEnding != null) foreach (var _e in _creditEnding) if (!string.IsNullOrEmpty(_e)) CreditLine(_e, ref _y, 46f, 1f, false, 30f);
+            CreditLine(GameLanguage.T("플레이해 주셔서 감사합니다", "Thank you for playing"), ref _y, 40f, 0.85f, false, 0f);
+            _creditHeight = _y;
+            _creditContent.sizeDelta = new Vector2(1400f, _creditHeight);
+        }
+
+        /// <summary>크레딧 한 줄(가운데 정렬). _y는 위에서부터 쌓인 높이로, 이 줄 높이와 _gap만큼 늘어남</summary>
+        private void CreditLine(string _s, ref float _y, float _size, float _alpha, bool _gradient, float _gap)
+        {
+            // 한글이 있으면 한글 글꼴(설정창과 같은 글꼴, 같은 크기로 보이게 조금 작게)
+            bool _hangul = false;
+            foreach (char ch in _s) if (ch >= 0xAC00 && ch <= 0xD7A3) { _hangul = true; break; }
+            var _ko = _hangul ? PauseSettingsUI.KoreanFont() : null;
+            var _t = MakeText(_creditContent, _s, Vector2.zero, _ko ? _size * 0.82f : _size, _gradient, _ko);
+            var _r = _t.rectTransform;
+            _r.anchorMin = _r.anchorMax = new Vector2(0.5f, 1f); _r.pivot = new Vector2(0.5f, 1f);
+            _r.sizeDelta = new Vector2(1400f, _size * 1.4f);
+            _r.anchoredPosition = new Vector2(0f, -_y);
+            _t.alignment = TextAlignmentOptions.Center;
+            if (!_gradient) _t.color = new Color(FACE.r, FACE.g, FACE.b, _alpha);
+            _y += _size * 1.4f + _gap;
+        }
+
+        private void OpenCredits()
+        {
+            if (_creditsOpen || !_creditGroup) return;
+            _creditsOpen = true; _creditsOpenedAt = Time.unscaledTime;
+            _menuGroup.interactable = _menuGroup.blocksRaycasts = false;
+            _menuGroup.DOFade(0f, CREDIT_FADE).SetUpdate(true).SetLink(_menuGroup.gameObject);
+            _titleGroup.DOFade(0f, CREDIT_FADE).SetUpdate(true).SetLink(_titleGroup.gameObject);
+            _creditGroup.blocksRaycasts = true;
+            _creditGroup.DOKill();
+            _creditGroup.DOFade(1f, CREDIT_FADE).SetUpdate(true).SetLink(_creditGroup.gameObject);
+
+            // 글 묶음 위 끝이 화면 아래 끝 → 글 묶음 아래 끝이 화면 위 끝을 지날 때까지
+            float _screenH = ((RectTransform)_creditGroup.transform).rect.height;
+            float _dist = _screenH + _creditHeight;
+            _creditRoll?.Kill();
+            _creditContent.anchoredPosition = Vector2.zero;
+            _creditRoll = _creditContent.DOAnchorPosY(_dist, _dist / Mathf.Max(1f, _creditSpeed))
+                .SetEase(Ease.Linear).SetUpdate(true).SetLink(_creditContent.gameObject)
+                .OnComplete(CloseCredits);
+        }
+
+        private void CloseCredits()
+        {
+            if (!_creditsOpen) return;
+            _creditsOpen = false;
+            _creditRoll?.Kill(); _creditRoll = null;
+            _creditGroup.blocksRaycasts = false;
+            _creditGroup.DOKill();
+            _creditGroup.DOFade(0f, CREDIT_FADE).SetUpdate(true).SetLink(_creditGroup.gameObject);
+            _titleGroup.DOFade(1f, CREDIT_FADE).SetUpdate(true).SetLink(_titleGroup.gameObject);
+            _menuGroup.DOFade(1f, CREDIT_FADE).SetUpdate(true).SetLink(_menuGroup.gameObject)
+                .OnComplete(() => { if (!_creditsOpen) _menuGroup.interactable = _menuGroup.blocksRaycasts = true; });
         }
 
         // ================= 영상 =================
@@ -568,7 +896,7 @@ namespace HistoryCrash.UI
             // 씬에 팀의 SoundManager가 있으면 그 음량(설정창이 바꾸는 값)을 그대로, 없으면 설정창 저장값
             var _sm = SoundManager.Instance;
             if (_sm) return _sm.MasterVolume * _sm.BgmVolume;
-            return PlayerPrefs.GetFloat("HC_Master", 100f) / 100f * PlayerPrefs.GetFloat("HC_Music", 70f) / 100f;
+            return PlayerPrefs.GetFloat("HC_Master", 100f) / 100f * PlayerPrefs.GetFloat("HC_Music", 50f) / 100f;
         }
 
         private AudioClip AudioFor(VideoClip _v)
@@ -593,16 +921,30 @@ namespace HistoryCrash.UI
             if (_cam) { _cam.clearFlags = CameraClearFlags.SolidColor; _cam.backgroundColor = Color.black; }
         }
 
-        private IEnumerator PlayClip(VideoClip _clip, bool _loop, float _fade)
+        // 영상 준비·첫 장면을 기다리는 최대 시간(초). 넘으면 기다리지 않고 진행 → 영상 문제로 메뉴가 영영 안 나오는 일 방지
+        private const float CLIP_WAIT_LIMIT = 4f;
+
+        // 기다린 시간에 더할 한 프레임 시간. 게임을 막 시작할 때처럼 로딩으로 한 프레임이 몇 초씩 걸려도
+        // 그 한 프레임이 대기 시간을 다 써 버리지 않게 최대 0.1초만 셈(그래서 로고가 준비 중에 포기되던 문제)
+        private static float WaitStep() => Mathf.Min(Time.unscaledDeltaTime, 0.1f);
+
+        private async UniTask PlayClipAsync(VideoClip _clip, bool _loop, float _fade, CancellationToken _token)
         {
-            if (!_clip) yield break;
+            if (!_clip) return;
             int _back = 1 - _front;
             var _p = _vp[_back];
             _p.Stop(); _p.clip = _clip; _p.isLooping = _loop;
             _p.Prepare();
-            while (!_p.isPrepared) yield return null;
+            for (float _t = 0f; !_p.isPrepared && _t < CLIP_WAIT_LIMIT; _t += WaitStep()) await NextFrame(_token);
+            if (!_p.isPrepared) Debug.LogWarning("[MainMenu] 영상 준비가 늦어 기다리지 않고 진행: " + _clip.name);
             _p.Play();
-            while (_p.frame < 1) yield return null;            // 첫 장면이 실제로 그려진 뒤 보여 줌(검은 깜빡임 방지)
+            // 첫 장면이 실제로 그려진 뒤 보여 줌(검은 깜빡임 방지). 재생이 멈춰 있으면 다시 걸고, 그래도 안 나오면 넘어감
+            for (float _t = 0f; _p.frame < 1 && _t < CLIP_WAIT_LIMIT; _t += WaitStep())
+            {
+                if (_p.isPrepared && !_p.isPlaying) _p.Play();
+                await NextFrame(_token);
+            }
+            if (_p.frame < 1) Debug.LogWarning("[MainMenu] 영상 첫 장면이 늦어 기다리지 않고 진행: " + _clip.name);
             if ((_clip == _introKo || _clip == _introEn) && _storyLoop && !_loopSrc.isPlaying)
             {
                 _loopSrc.clip = _storyLoop; _loopSrc.time = 0f; _loopSrc.volume = MusicVolume(); _loopSrc.Play();
@@ -616,21 +958,33 @@ namespace HistoryCrash.UI
                 var _prev = _as[1 - _back];
                 if (_prev.isPlaying) _prev.DOFade(0f, _audioFade).SetUpdate(true).SetLink(gameObject).OnComplete(_prev.Stop);
             }
+            // 스토리(인트로) 영상의 페이지를 밝게. 줌인 영상은 페이지가 이미 밝게 구워져 있어 바로 이어짐
+            _vimg[_back].material = _clip == _introKo || _clip == _introEn ? Parchment() : null;
             _vimg[_back].transform.SetAsLastSibling();
             int _old = _front; _front = _back;
-            if (_fade > 0f) yield return Fade(_vimg[_back], 0f, 1f, _fade, true);
+            if (_fade > 0f) await FadeAsync(_vimg[_back], 0f, 1f, _fade, _token, true);
             else SetAlpha(_vimg[_back], 1f);
             _vp[_old].Stop(); SetAlpha(_vimg[_old], 0f);
         }
 
-        private IEnumerator WaitClipEnd()
+        private async UniTask WaitClipEndAsync(CancellationToken _token)
         {
             var _p = _vp[_front];
             bool _done = false;
             VideoPlayer.EventHandler _h = _ => _done = true;
             _p.loopPointReached += _h;
-            while (!_done && (_p.isPlaying || _p.frame < 2)) yield return null;
-            _p.loopPointReached -= _h;
+            try
+            {
+                // 재생이 멈춘 채(시작도 못 함) 일정 시간이 지나면 끝난 것으로 보고 넘어감
+                float _stalled = 0f;
+                while (!_done && (_p.isPlaying || _p.frame < 2) && _stalled < CLIP_WAIT_LIMIT)
+                {
+                    _stalled = _p.isPlaying ? 0f : _stalled + WaitStep();
+                    await NextFrame(_token);
+                }
+                if (_stalled >= CLIP_WAIT_LIMIT) Debug.LogWarning("[MainMenu] 영상이 재생되지 않아 기다리지 않고 진행: " + (_p.clip ? _p.clip.name : "-"));
+            }
+            finally { _p.loopPointReached -= _h; }
         }
 
         // ================= UI 만들기 =================
@@ -675,10 +1029,19 @@ namespace HistoryCrash.UI
             // 메뉴
             _items.Clear();
             if (_hasSave) _items.Add("Continue");
-            _items.Add("Start"); _items.Add("Settings"); _items.Add("Quit");
+            _items.Add("Start"); _items.Add("Settings"); _items.Add("Credits"); _items.Add("Quit");
             var _menu = new GameObject("Menu", typeof(RectTransform), typeof(CanvasGroup)).GetComponent<RectTransform>();
             _menu.SetParent(_root, false); Stretch(_menu);
             _menuGroup = _menu.GetComponent<CanvasGroup>();
+            // 메뉴 뒤 은은한 어두운 번짐: 촛불 빛을 받은 밝은 책상 위에서도 글자가 떠 보이게
+            var _back = new GameObject("MenuBackdrop", typeof(RectTransform), typeof(RawImage));
+            _back.transform.SetParent(_menu, false);
+            var _br = (RectTransform)_back.transform;
+            _br.anchorMin = _br.anchorMax = new Vector2(0f, 1f); _br.pivot = new Vector2(0.5f, 0.5f);
+            float _menuH = (_items.Count - 1) * _menuSize * 1.55f;
+            _br.anchoredPosition = new Vector2(_menuPos.x + _menuSize * 2f, -(_menuPos.y + _menuH / 2f));
+            _br.sizeDelta = new Vector2(_menuSize * 9f, _menuH + _menuSize * 4.5f);
+            var _bi = _back.GetComponent<RawImage>(); _bi.texture = SoftBlob(); _bi.color = new Color(0f, 0f, 0f, 0.6f); _bi.raycastTarget = false;
             for (int i = 0; i < _items.Count; i++)
             {
                 var _t = MakeText(_menu, _items[i], _menuPos + new Vector2(0f, i * _menuSize * 1.55f), _menuSize, false);
@@ -686,8 +1049,10 @@ namespace HistoryCrash.UI
                 var _it = _t.gameObject.AddComponent<MainMenuItem>(); _it.Owner = this; _it.Index = i;
                 _itemTexts.Add(_t);
             }
-            _selMark = MakeRect(_menu, "Select", Vector2.zero, new Vector2(12.7f, 12.7f), RUBY, 45f, new Vector2(0.5f, 0.5f)).rectTransform;
+            _selMark = MakeRect(_menu, "Select", Vector2.zero, new Vector2(_menuSize * 0.3f, _menuSize * 0.3f), RUBY, 45f, new Vector2(0.5f, 0.5f)).rectTransform;
             Select(0);
+
+            BuildCredits(_root);
 
             // 인트로 뒤 책장 넘김·조작법 페이지(영상 위, 검은 막 아래)
             BuildBookPages(_root);
@@ -697,9 +1062,73 @@ namespace HistoryCrash.UI
             var _b = new GameObject("Black", typeof(RectTransform), typeof(Image));
             _b.transform.SetParent(_root, false); Stretch((RectTransform)_b.transform);
             _black = _b.GetComponent<Image>(); _black.color = Color.black; _black.raycastTarget = false;
+            _uiRoot = _root;
         }
 
-        private TextMeshProUGUI MakeText(RectTransform _parent, string _s, Vector2 _pos, float _size, bool _gradient)
+        // ================= 시작 로고 영상 =================
+        // 검은 막 위에 로고 영상을 한 번 재생 → 끝나거나 건너뛰면 서서히 사라지고 원래 흐름(검은 막 → 메뉴)으로.
+        // 게임을 켠 뒤 처음 메인메뉴에 올 때만(게임에서 메인메뉴로 돌아올 때는 다시 나오지 않음)
+        private const float LOGO_SKIP_GUARD = 0.2f;   // 시작 직후 이 시간(초)은 건너뛰기 입력을 받지 않음
+        private const float LOGO_FADE = 0.4f;
+        private static bool _logoShown;
+        private RectTransform _uiRoot;
+
+        private async UniTask PlayLogoAsync(CancellationToken _token)
+        {
+            if (!_logoClip || _logoShown) return;
+            _logoShown = true;
+
+            var _rtLogo = new RenderTexture((int)_logoClip.width, (int)_logoClip.height, 0) { name = "MainMenuLogo" };
+            var _go = new GameObject("LogoVideo", typeof(RectTransform), typeof(RawImage), typeof(AspectRatioFitter));
+            _go.transform.SetParent(_uiRoot, false); _go.transform.SetAsLastSibling();   // 검은 막보다 위
+            Stretch((RectTransform)_go.transform);
+            var _img = _go.GetComponent<RawImage>(); _img.texture = _rtLogo; _img.raycastTarget = false; SetAlpha(_img, 0f);
+            var _fit = _go.GetComponent<AspectRatioFitter>(); _fit.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
+            _fit.aspectRatio = (float)_logoClip.width / Mathf.Max(1f, _logoClip.height);
+
+            var _p = _go.AddComponent<VideoPlayer>();
+            _p.playOnAwake = false; _p.isLooping = false; _p.clip = _logoClip;
+            _p.renderMode = VideoRenderMode.RenderTexture; _p.targetTexture = _rtLogo;
+            _p.timeUpdateMode = VideoTimeUpdateMode.UnscaledGameTime; _p.waitForFirstFrame = true;
+            // 소리는 AudioSource로 내보냄(Direct는 에디터에서 소리가 안 나는 경우가 있음). 코드로 만든 VideoPlayer는 트랙 수가 0이라 Prepare 전에 켜 줘야 함
+            var _src = _go.AddComponent<AudioSource>(); _src.playOnAwake = false; _src.spatialBlend = 0f; _src.volume = MusicVolume();
+            _p.audioOutputMode = VideoAudioOutputMode.AudioSource;
+            _p.controlledAudioTrackCount = 1;
+            _p.EnableAudioTrack(0, true); _p.SetTargetAudioSource(0, _src);
+            bool _ended = false; _p.loopPointReached += _ => _ended = true;
+            _p.Prepare();
+            for (float _t = 0f; !_p.isPrepared && _t < CLIP_WAIT_LIMIT; _t += WaitStep()) await NextFrame(_token);   // 준비가 안 되면 포기
+            if (_p.isPrepared)
+            {
+                _src.volume = MusicVolume();
+                _p.Play();
+                for (float _t = 0f; _p.frame < 1 && !_ended && _t < CLIP_WAIT_LIMIT; _t += WaitStep()) await NextFrame(_token);   // 첫 장면이 그려진 뒤 보여 줌
+                SetAlpha(_img, 1f);
+                float _start = Time.unscaledTime, _stalled = 0f;
+                while (!_ended && _stalled < CLIP_WAIT_LIMIT)   // 재생이 멈춘 채 오래 있으면 끝난 것으로 봄
+                {
+                    _stalled = _p.isPlaying ? 0f : _stalled + WaitStep();
+                    var _kb = Keyboard.current; var _ms = Mouse.current;
+                    bool _skip = Time.unscaledTime - _start > LOGO_SKIP_GUARD
+                                 && ((_kb != null && (_kb.escapeKey.wasPressedThisFrame || _kb.enterKey.wasPressedThisFrame || _kb.spaceKey.wasPressedThisFrame))
+                                     || (_ms != null && _ms.leftButton.wasPressedThisFrame));
+                    if (_skip) break;
+                    _src.volume = MusicVolume();   // 재생 중 볼륨 변경 반영
+                    await NextFrame(_token);
+                }
+                // 화면과 소리가 함께 잦아듦
+                await WaitTween(DOVirtual.Float(1f, 0f, LOGO_FADE, _k =>
+                {
+                    SetAlpha(_img, _k);
+                    _src.volume = MusicVolume() * _k;
+                }).SetEase(Ease.InOutSine).SetUpdate(true).SetLink(_go), _token);
+            }
+            _p.Stop();
+            Destroy(_go);
+            _rtLogo.Release(); Destroy(_rtLogo);
+        }
+
+        private TextMeshProUGUI MakeText(RectTransform _parent, string _s, Vector2 _pos, float _size, bool _gradient, TMP_FontAsset _fontOverride = null)
         {
             var _go = new GameObject(_s, typeof(RectTransform), typeof(TextMeshProUGUI));
             _go.transform.SetParent(_parent, false);
@@ -707,15 +1136,15 @@ namespace HistoryCrash.UI
             _r.anchorMin = _r.anchorMax = new Vector2(0f, 1f); _r.pivot = new Vector2(0f, 0.5f);
             _r.anchoredPosition = new Vector2(_pos.x, -_pos.y); _r.sizeDelta = new Vector2(_size * 6f, _size * 1.4f);
             var _t = _go.GetComponent<TextMeshProUGUI>();
-            if (_font) _t.font = _font;
+            if (_fontOverride) _t.font = _fontOverride; else if (_font) _t.font = _font;
             _t.text = _s; _t.fontSize = _size; _t.alignment = TextAlignmentOptions.MidlineLeft;
             _t.textWrappingMode = TextWrappingModes.NoWrap; _t.raycastTarget = false; _t.color = FACE;
             // 진갈색 테두리 + 아래로 떨어지는 그림자
             _t.fontMaterial = new Material(_t.fontSharedMaterial);
-            _t.outlineWidth = 0.12f; _t.outlineColor = EDGE;
+            _t.outlineWidth = 0.18f; _t.outlineColor = EDGE;
             var _m = _t.fontMaterial;
             _m.EnableKeyword("UNDERLAY_ON");
-            _m.SetColor("_UnderlayColor", new Color(0f, 0f, 0f, 0.6f));
+            _m.SetColor("_UnderlayColor", new Color(0f, 0f, 0f, 0.85f));
             _m.SetFloat("_UnderlayOffsetX", 0.35f); _m.SetFloat("_UnderlayOffsetY", -0.5f); _m.SetFloat("_UnderlaySoftness", 0.35f);
             if (_gradient)
             {
@@ -724,6 +1153,23 @@ namespace HistoryCrash.UI
                 _t.enableVertexGradient = true; _t.colorGradient = new VertexGradient(_top, _top, _bot, _bot); _t.color = Color.white;
             }
             return _t;
+        }
+
+        /// <summary>가운데가 진하고 가장자리로 갈수록 투명해지는 부드러운 원(타원으로 늘려 씀)</summary>
+        private static Texture2D SoftBlob()
+        {
+            const int N = 64;
+            var _tex = new Texture2D(N, N, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, name = "MainMenu_SoftBlob" };
+            float _c = (N - 1) * 0.5f;
+            for (int _y = 0; _y < N; _y++)
+                for (int _x = 0; _x < N; _x++)
+                {
+                    float _d = Mathf.Sqrt((_x - _c) * (_x - _c) + (_y - _c) * (_y - _c)) / _c;
+                    float _a = Mathf.Clamp01(1f - _d); _a = _a * _a * (3f - 2f * _a);
+                    _tex.SetPixel(_x, _y, new Color(1f, 1f, 1f, _a));
+                }
+            _tex.Apply();
+            return _tex;
         }
 
         private static Image MakeRect(RectTransform _parent, string _n, Vector2 _pos, Vector2 _size, Color _c, float _rot, Vector2 _pivot)
@@ -740,17 +1186,26 @@ namespace HistoryCrash.UI
         private static void Stretch(RectTransform _r) { _r.anchorMin = Vector2.zero; _r.anchorMax = Vector2.one; _r.offsetMin = _r.offsetMax = Vector2.zero; }
         private static void SetAlpha(Graphic _g, float _a) { var _c = _g.color; _c.a = _a; _g.color = _c; }
 
-        // 페이드는 DOTween(게임이 멈춰도 흐르는 시간). 흐름(영상 준비·입력 기다리기)은 코루틴이 트윈 끝을 기다림
-        private static IEnumerator Fade(Graphic _g, float _a0, float _a1, float _dur, bool _smooth = true)
+        // 페이드는 DOTween(게임이 멈춰도 흐르는 시간). 흐름(영상 준비·입력 기다리기)은 UniTask가 트윈 끝을 기다림
+        // 취소(메인메뉴 파괴)되면 OperationCanceledException으로 흐름 전체가 멈춤. 시작점의 Forget()이 이 예외는 조용히 넘김
+
+        // 다음 프레임까지 대기. LastUpdate = 모든 Update 뒤라 코루틴(yield return null)과 같은 순서(Update의 입력 확인이 먼저)
+        private static UniTask NextFrame(CancellationToken _token) => UniTask.Yield(PlayerLoopTiming.LastUpdate, _token);
+
+        // 트윈이 끝나거나 Kill될 때까지 대기(WaitForCompletion 대신)
+        private static UniTask WaitTween(Tween _tween, CancellationToken _token)
+            => UniTask.WaitWhile(() => _tween.IsActive() && !_tween.IsComplete(), PlayerLoopTiming.LastUpdate, _token);
+
+        private static async UniTask FadeAsync(Graphic _g, float _a0, float _a1, float _dur, CancellationToken _token, bool _smooth = true)
         {
             SetAlpha(_g, _a0);
-            yield return _g.DOFade(_a1, _dur).SetEase(_smooth ? Ease.InOutSine : Ease.Linear).SetUpdate(true).SetLink(_g.gameObject).WaitForCompletion();
+            await WaitTween(_g.DOFade(_a1, _dur).SetEase(_smooth ? Ease.InOutSine : Ease.Linear).SetUpdate(true).SetLink(_g.gameObject), _token);
         }
 
-        private static IEnumerator FadeGroup(CanvasGroup _g, float _a0, float _a1, float _dur)
+        private static async UniTask FadeGroupAsync(CanvasGroup _g, float _a0, float _a1, float _dur, CancellationToken _token)
         {
             _g.alpha = _a0;
-            yield return _g.DOFade(_a1, _dur).SetEase(Ease.Linear).SetUpdate(true).SetLink(_g.gameObject).WaitForCompletion();
+            await WaitTween(_g.DOFade(_a1, _dur).SetEase(Ease.Linear).SetUpdate(true).SetLink(_g.gameObject), _token);
         }
 
         private static void EnsureEventSystem()

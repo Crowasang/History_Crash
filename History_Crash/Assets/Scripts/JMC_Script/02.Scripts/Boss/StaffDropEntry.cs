@@ -27,11 +27,5 @@ namespace HistoryCrash.Boss
 
             private float _landTime;
             public float LandTime { get => _landTime; set => _landTime = value; }
-
-            private Material _mat;
-            public Material Mat { get => _mat; set => _mat = value; }
-
-            private Renderer[] _iconRenderers;
-            public Renderer[] IconRenderers { get => _iconRenderers; set => _iconRenderers = value; }
     }
 }

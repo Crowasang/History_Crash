@@ -1,4 +1,5 @@
-using System.Collections;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using DG.Tweening;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -53,6 +54,8 @@ namespace HistoryCrash.UI
 
             // 지금 화면과 똑같은 펼침면(조작법 글자가 걷힌 빈 도감)
             _spread = NewGraphic<RawImage>("Spread"); _spread.texture = _spreadTex;
+            // 메인메뉴 도감 펼침면과 같은 밝은 양피지 보정(바로 앞 화면과 색이 이어지게)
+            _spread.material = MainMenuController.NewParchment("Transition_Parchment");
             Stretch(_spread.rectTransform);
             var _fit = _spread.gameObject.AddComponent<AspectRatioFitter>(); _fit.aspectMode = AspectRatioFitter.AspectMode.EnvelopeParent; _fit.aspectRatio = 16f / 9f;
         }
@@ -77,12 +80,12 @@ namespace HistoryCrash.UI
             foreach (var _b in _pauses) if (_b.enabled) { _b.enabled = false; _list.Add(_b); }
             _lockedInputs = _list.ToArray();
             Cursor.lockState = CursorLockMode.None; Cursor.visible = false;
-            StartCoroutine(Play());
+            PlayAsync(destroyCancellationToken).Forget();
         }
 
-        private IEnumerator Play()
+        private async UniTaskVoid PlayAsync(CancellationToken _token)
         {
-            for (int i = 0; i < 3; i++) yield return null;               // 게임 씬 첫 장면이 자리 잡도록
+            if (await UniTask.DelayFrame(3, cancellationToken: _token).SuppressCancellationThrow()) return;   // 게임 씬 첫 장면이 자리 잡도록
 
             // 연출은 DOTween 시퀀스(게임 시간이 멈춰 있으므로 SetUpdate(true))
             var _dimC = new Color(0.03f, 0.035f, 0.02f, DIM);
@@ -113,7 +116,8 @@ namespace HistoryCrash.UI
                 _dim.color = new Color(_dimC.r, _dimC.g, _dimC.b, DIM * (1f - Smooth(_u)));
                 SetBook(SCALE, _has ? CLOSED_SHIFT : 0f, Y_OFFSET - 720f * _u * _u);
             }).SetEase(Ease.Linear));
-            yield return _seq.WaitForCompletion();
+            // 시퀀스가 끝나면(자동 Kill) IsActive가 false가 됨 (SceneLoader와 같은 방식)
+            if (await UniTask.WaitWhile(() => _seq.IsActive(), cancellationToken: _token).SuppressCancellationThrow()) return;
             Time.timeScale = _prevScale;
             Cursor.lockState = CursorLockMode.Locked; Cursor.visible = false;
             PauseSettingsUI.InputBlocked = false;    // 책이 다 내려간 이 순간부터 플레이어 조작 가능

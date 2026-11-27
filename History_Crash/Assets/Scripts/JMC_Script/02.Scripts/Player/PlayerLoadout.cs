@@ -1,3 +1,5 @@
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.Serialization;
@@ -90,6 +92,7 @@ namespace HistoryCrash.Player
             if (_it.Kind == PickupKind.Staff) { HeldStaff = _it.Value; Debug.Log("[Loadout] Staff " + _staffNames[HeldStaff]); }
             else { HasOrb = true; HeldOrb = _it.ElementValue; SetSocketOrb(HeldOrb); Debug.Log("[Loadout] Orb " + ElementInfo.Name(HeldOrb)); }
             ElementFx.Burst(_it.Kind == PickupKind.Orb ? _it.ElementValue : Element.Electric, _it.transform.position + Vector3.up * 0.4f, 0.5f, 10);
+            HistoryCrash.Sound.GameSfx.Play(_it.Kind == PickupKind.Staff ? "Pickup_Weapon" : "Pickup_Orb");
             _it.Collect();
             if (_animator && !string.IsNullOrEmpty(_pickupState)) _animator.CrossFadeInFixedTime(_pickupState, 0.1f);
             return true;
@@ -132,19 +135,26 @@ namespace HistoryCrash.Player
             _socketOrb.SetParent(_staff, false);
             _socketOrb.localPosition = _socketLocal;
             _socketOrb.localRotation = Quaternion.identity;
-            StartCoroutine(InsertOrb(_socketOrb, _e));
+            InsertOrbAsync(_socketOrb, _e, destroyCancellationToken).Forget();
         }
 
-        private System.Collections.IEnumerator InsertOrb(Transform _t, Element _e)
+        // 다음 프레임까지 대기. LastUpdate = 모든 Update 뒤라 코루틴(yield return null)과 같은 순서. 취소되면 true
+        // (일시정지 때 컴포넌트가 꺼질 수 있으므로 OnDisable로 취소하지 않음 → 시전 중 IsCasting이 남지 않게)
+        private static UniTask<bool> NextFrame(CancellationToken _token)
+        {
+            return UniTask.Yield(PlayerLoopTiming.LastUpdate, _token).SuppressCancellationThrow();
+        }
+
+        private async UniTaskVoid InsertOrbAsync(Transform _t, Element _e, CancellationToken _token)
         {
             // 고리에 박히는 연출: 커지며 자리 잡고 속성 불티
             for (float _u = 0; _u < 1f && _t; _u += Time.deltaTime / 0.25f)
             {
                 float _k = 1f - (1f - _u) * (1f - _u);
                 _t.localScale = Vector3.one * _socketSize * Mathf.Lerp(1.6f, 1f, _k) * Mathf.Min(1f, _u * 3f);
-                yield return null;
+                if (await NextFrame(_token)) return;
             }
-            if (!_t) yield break;
+            if (!_t) return;
             _t.localScale = Vector3.one * _socketSize;
             ElementFx.Burst(_e, _t.position, 0.35f, 10);
         }
@@ -169,7 +179,7 @@ namespace HistoryCrash.Player
         private void Attack()
         {
             if (IsCasting) return;
-            StartCoroutine(CastRoutine(HeldStaff, HeldOrb));
+            CastAsync(HeldStaff, HeldOrb, destroyCancellationToken).Forget();
             HeldStaff = -1; HasOrb = false;   // 1회용
         }
 
@@ -191,9 +201,10 @@ namespace HistoryCrash.Player
 
         private bool InState(string _s) { return _animator && _animator.GetCurrentAnimatorStateInfo(0).IsName(_s); }
 
-        private System.Collections.IEnumerator CastRoutine(int _staff, Element _orb)
+        private async UniTaskVoid CastAsync(int _staff, Element _orb, CancellationToken _token)
         {
             IsCasting = true;
+            HistoryCrash.Sound.GameSfx.Play("Player_Cast");
             SpeedScale = _castMoveSpeedScale;   // 시전 중에도 이동 가능(느리게)
             float _wait = 0.1f;
             string _standState = _animator && _staff >= 0 && _staff < _castStates.Length ? _castStates[_staff] : null;
@@ -223,10 +234,10 @@ namespace HistoryCrash.Player
                         _playing = _want;
                     }
                 }
-                yield return null;
+                if (await NextFrame(_token)) return;
             }
             FireSkill(_staff, _orb);
-            yield return new WaitForSeconds(_castRecovery);
+            if (await UniTask.Delay(System.TimeSpan.FromSeconds(_castRecovery), cancellationToken: _token).SuppressCancellationThrow()) return;
             foreach (var _ps in GetComponentsInChildren<ParticleSystem>()) if (_ps.name.StartsWith("Fx_Trail")) { var _em = _ps.emission; _em.rateOverTime = 0; _ps.transform.SetParent(null, true); Destroy(_ps.gameObject, 0.6f); }
             IsCasting = false;   // 다음 공격 허용
 
@@ -249,7 +260,7 @@ namespace HistoryCrash.Player
                     }
                     SpeedScale = _playing == _standState ? 1f : _castMoveSpeedScale;
                     _guard -= Time.deltaTime;
-                    yield return null;
+                    if (await NextFrame(_token)) return;
                 }
                 if (!IsCasting)
                 {
@@ -265,10 +276,11 @@ namespace HistoryCrash.Player
             // 공격으로 오브를 소비: 지팡이 홀의 오브가 터지며 사라짐(시전 중 새 오브를 주웠다면 그대로 둠)
             if (!HasOrb) { _heldOrbForFx = _heldOrb; ClearSocketOrb(true); }
 
+            // 주운 스태프의 패턴을 약화판으로 사용(모양 = 패턴 오브젝트, 색·효과 = 오브 속성)
+            // 방향 = 발사되는 순간의 화면 방향, B·D 위치 = 플레이어 자리
             Vector3 _dir = _model ? _model.forward : transform.forward;
             if (_camera) { _dir = Vector3.ProjectOnPlane(_camera.forward, Vector3.up); }
             _dir.y = 0; _dir = _dir.sqrMagnitude > 1e-4f ? _dir.normalized : Vector3.forward;
-            // 주운 스태프의 패턴을 약화판으로 사용(모양 = 패턴 오브젝트, 색·효과 = 오브 속성)
             if (!_director) _director = FindFirstObjectByType<BossPatternDirector>();
             PlayerStaffSkill.Cast(_heldStaff, _heldOrb, transform, _dir, _grid, _director ? _director.PatternVisual(_heldStaff) : null);
             Debug.Log("[Loadout] Attack staff " + _staffNames[_heldStaff] + " + orb " + ElementInfo.Name(_heldOrb));
@@ -283,11 +295,12 @@ namespace HistoryCrash.Player
                 var _style = new GUIStyle(GUI.skin.label) { fontSize = 18, alignment = TextAnchor.MiddleCenter };
                 // 설정창 Language에 따라 한국어/영어
                 string _what = _it.Kind == PickupKind.Staff
-                    ? HistoryCrash.UI.GameLanguage.T("스태프 " + _staffNames[_it.Value], "Staff " + _staffNames[_it.Value])
+                    ? HistoryCrash.UI.GameLanguage.T("무기 " + _staffNames[_it.Value], "Weapon " + _staffNames[_it.Value])
                     : HistoryCrash.UI.GameLanguage.T(ElementInfo.NameKo(_it.ElementValue) + " 오브", ElementInfo.Name(_it.ElementValue) + " Orb");
                 string _msg = HistoryCrash.UI.GameLanguage.T("[E] " + _what + " 줍기", "[E] Pick up " + _what);
                 GUI.Label(new Rect(Screen.width / 2 - 160, Screen.height * 0.62f, 320, 30), _msg, _style);
             }
+            if (!HistoryCrash.UI.DebugHudLayout.Show) return;   // 아래 Staff/Orb 글자는 디버그용
             string _staff = HeldStaff >= 0 ? _staffNames[HeldStaff] : "-";
             string _orb = HasOrb ? ElementInfo.NameKo(HeldOrb) : "-";
             GUI.Label(new Rect(20, HistoryCrash.UI.DebugHudLayout.Top + 84, 360, 20), "Staff: " + _staff + "   Orb: " + _orb + (CanAttack ? "   [좌클릭] 공격" : ""));

@@ -1,5 +1,6 @@
-using System.Collections;
 using System.Collections.Generic;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 using HistoryCrash.Boss;
 using HistoryCrash.CameraRig;
@@ -16,9 +17,9 @@ namespace HistoryCrash.Combat
     /// 같은 속성의 머미만 맞는다(맞으면 즉사).
     /// - A: 코페쉬가 Player 주위를 돌며 근접 공격
     /// - B: Player 발밑에 함정 설치, 같은 속성 머미가 밟으면 솟아 공격
-    /// - C: 바라보는 방향으로 보석 3연발
+    /// - C: 바라보는 방향으로 보석 3연발(소환 중 화면을 돌리면 따라 돎)
     /// - D: Player 현재 위치에 범위를 줄인 태양 낙하
-    /// - E: 창 1개를 전방으로 관통 사출
+    /// - E: 바라보는 방향으로 창 2개 관통 사출(소환 중 화면을 돌리면 따라 돎)
     /// </summary>
     public class PlayerStaffSkill : MonoBehaviour
     {
@@ -30,27 +31,43 @@ namespace HistoryCrash.Combat
         public const float E_SPEED = 20f, E_RANGE = 16f, E_HIT = 0.6f, E_SIZE = 2.4f;   // 창 길이. 파라오 E 창 최대 9.7 m(절반 4.85는 너무 커서 약 1/4)
 
         public const float SKILL_LIGHT_INTENSITY = 0.8f;   // 스킬 오브젝트에 붙는 속성색 점광원 세기
-        private Element _element; private int _pattern; private Transform _player; private Vector3 _dir; private TileGrid _grid; private Transform _visualSrc;
+        private Element _element; private int _pattern; private Transform _player; private Vector3 _dir; private Vector3 _target; private TileGrid _grid; private Transform _visualSrc;
         private readonly HashSet<Mummy> _hit = new HashSet<Mummy>();
 
+        /// <summary>공격 발동. 지점을 따로 정하지 않으면 플레이어 발밑(B)</summary>
         public static void Cast(int _pattern, Element _e, Transform _player, Vector3 _dir, TileGrid _grid, Transform _patternVisual)
+        {
+            Cast(_pattern, _e, _player, _dir, _player.position, _grid, _patternVisual);
+        }
+
+        /// <param name="_dir">C·E 발사 방향(클릭한 순간 고정, 시전 중 화면을 돌려도 바뀌지 않음)</param>
+        /// <param name="_target">B 설치 지점(PlayerAttackAim이 정함)</param>
+        public static void Cast(int _pattern, Element _e, Transform _player, Vector3 _dir, Vector3 _target, TileGrid _grid, Transform _patternVisual)
         {
             var _go = new GameObject("PlayerSkill_" + "ABCDE"[Mathf.Clamp(_pattern, 0, 4)] + "_" + ElementInfo.Name(_e));
             _go.transform.position = _player.position;
             var _s = _go.AddComponent<PlayerStaffSkill>();
-            _s._pattern = _pattern; _s._element = _e; _s._player = _player; _s._dir = _dir; _s._grid = _grid; _s._visualSrc = _patternVisual;
+            _s._pattern = _pattern; _s._element = _e; _s._player = _player; _s._dir = _dir; _s._target = _target; _s._grid = _grid; _s._visualSrc = _patternVisual;
             ElementFx.Burst(_e, _player.position + Vector3.up * 0.4f + _dir * 0.4f, 0.7f, 16);
+            // B는 함정이 솟아 때릴 때 따로 냄. D는 착탄(1.30초)에 맞춰 조금 늦게
+            if (_pattern != 1) HistoryCrash.Sound.GameSfx.Play("Player_Attack" + "ABCDE"[Mathf.Clamp(_pattern, 0, 4)], _pattern == 3 ? 0.2f : 0f);
             switch (_pattern)
             {
-                case 0: _s.StartCoroutine(_s.RunA()); break;
-                case 1: _s.StartCoroutine(_s.RunB()); break;
-                case 2: _s.StartCoroutine(_s.RunC()); break;
-                case 3: _s.StartCoroutine(_s.RunD()); break;
-                default: _s.StartCoroutine(_s.RunE()); break;
+                case 0: _s.RunAAsync(_s.destroyCancellationToken).Forget(); break;
+                case 1: _s.RunBAsync(_s.destroyCancellationToken).Forget(); break;
+                case 2: _s.RunCAsync(_s.destroyCancellationToken).Forget(); break;
+                case 3: _s.RunDAsync(_s.destroyCancellationToken).Forget(); break;
+                default: _s.RunEAsync(_s.destroyCancellationToken).Forget(); break;
             }
         }
 
         // ---------- 공통 ----------
+        // 다음 프레임까지 대기. LastUpdate = 모든 Update 뒤라 코루틴(yield return null)과 같은 순서. 취소되면(스킬 오브젝트 파괴) true
+        private static UniTask<bool> NextFrame(CancellationToken _token)
+        {
+            return UniTask.Yield(PlayerLoopTiming.LastUpdate, _token).SuppressCancellationThrow();
+        }
+
         // 원래 재질에 속성색 발광만 더한 복사본(텍스처 유지). (원본 재질, 속성, 세기)별로 한 번만 만듦
         private static readonly Dictionary<string, Material> _tintCache = new Dictionary<string, Material>();
         private static Material TintMat(Material _src, Element _e, float _tint)
@@ -142,6 +159,22 @@ namespace HistoryCrash.Combat
             return !_grid.InBounds(_c) || !_grid.IsWalkable(_c);
         }
 
+        // 벽 칸 가장자리(열린 칸에서 반 칸 안)는 벽면 앞 빈 곳이라 지나감. 벽을 따라 쏠 때 벽 칸을 스쳐 멈추던 문제
+        private bool WallDeep(Vector3 _p)
+        {
+            float _m = _grid != null ? _grid.TileSize * 0.45f : 0.45f;
+            return Wall(_p) && Wall(_p + Vector3.right * _m) && Wall(_p - Vector3.right * _m) && Wall(_p + Vector3.forward * _m) && Wall(_p - Vector3.forward * _m);
+        }
+
+        // 떠 있는 자리(좌우·뒤)가 벽 칸 안이거나 바로 앞(탄이 벽 판정을 시작하는 거리)이 벽이면 플레이어 쪽으로 당김.
+        // 벽에 붙어 쏘면 옆 자리에서 출발한 탄이 0.6 m 만에 벽에 막히던 문제. 플레이어 정면이 막혔으면 그건 원래대로 막힘
+        private Vector3 OutOfWall(Vector3 _p, Vector3 _f)
+        {
+            Vector3 _c = _player.position; _c.y = _p.y;
+            for (int _i = 0; _i < 8 && (Wall(_p) || Wall(_p + _f * 0.8f)); _i++) _p = Vector3.Lerp(_p, _c, 0.35f);
+            return Wall(_p) || Wall(_p + _f * 0.8f) ? _c : _p;
+        }
+
         private float FloorY { get { return _grid != null ? _grid.FloorTopY : _player.position.y - 0.3f; } }
 
         private void Finish(ParticleSystem _trail = null)
@@ -151,7 +184,7 @@ namespace HistoryCrash.Combat
         }
 
         // ---------- A: 코페쉬 회전 ----------
-        private IEnumerator RunA()
+        private async UniTaskVoid RunAAsync(CancellationToken _token)
         {
             var _blade = Shape(transform, A_SIZE, Vector3.zero, 0.6f, 1.8f, 1.4f);   // 텍스처 + 속성 발광 틴트 + 강한 점광원
             var _trail = ElementFx.Trail(_element, _blade, 0.17f, 80f);
@@ -166,14 +199,14 @@ namespace HistoryCrash.Combat
                 _blade.position = _c + new Vector3(Mathf.Sin(_ang), 0, Mathf.Cos(_ang)) * _r;
                 _blade.Rotate(Vector3.up, 1440f * Time.deltaTime, Space.World);
                 HitAround(_blade.position, A_HIT, _blade.position - _prev);
-                yield return null;
+                if (await NextFrame(_token)) return;
             }
             ElementFx.Burst(_element, _blade.position, 0.8f, 14);
             Finish(_trail);
         }
 
         // ---------- B: 발밑 함정 ----------
-        private IEnumerator RunB()
+        private async UniTaskVoid RunBAsync(CancellationToken _token)
         {
             Vector3 _pos = _player.position; _pos.y = FloorY;
             if (_grid != null) _pos = _grid.CellCenter(_grid.WorldToCell(_player.position), FloorY);
@@ -185,6 +218,7 @@ namespace HistoryCrash.Combat
             _glow.transform.localPosition = new Vector3(0, 0.05f, 0);
             var _gm = _glow.main; _gm.gravityModifier = -0.2f;
             ElementFx.Impact(_pos, ElementInfo.Color(_element), new Color(0.3f, 0.27f, 0.2f, 0.4f), 2.0f);
+            HistoryCrash.Sound.GameSfx.Play("Player_TrapSet");
             float _born = Time.time;
             while (Time.time - _born < B_LIFE)
             {
@@ -194,20 +228,21 @@ namespace HistoryCrash.Combat
                     if (!_m || !_m.IsAlive || !_m.Active || _m.Element != _element) continue;
                     Vector3 _d = _m.transform.position - _pos; _d.y = 0;
                     if (_d.magnitude > B_TRIGGER) continue;
+                    HistoryCrash.Sound.GameSfx.Play("Player_AttackB", _pos);
                     for (float _t = 0; _t < 0.12f; _t += Time.deltaTime)
                     {
                         float _u = _t / 0.12f;
                         _trap.localScale = new Vector3(1f, Mathf.Lerp(0.35f, 1.3f, _u), 1f);
                         _trap.localPosition = new Vector3(0, Mathf.Lerp(-B_SIZE * 0.35f, 0.1f, _u), 0);
-                        yield return null;
+                        if (await NextFrame(_token)) return;
                     }
                     ElementFx.Impact(_pos, ElementInfo.Color(_element), new Color(0.3f, 0.27f, 0.2f, 0.5f), 3.3f);
                     HitAround(_pos, B_TRIGGER + 0.15f, Vector3.up);
-                    yield return new WaitForSeconds(0.35f);
+                    if (await UniTask.Delay(System.TimeSpan.FromSeconds(0.35f), cancellationToken: _token).SuppressCancellationThrow()) return;
                     Finish(_glow);
-                    yield break;
+                    return;
                 }
-                yield return null;
+                if (await NextFrame(_token)) return;
             }
             Finish(_glow);
         }
@@ -219,7 +254,7 @@ namespace HistoryCrash.Combat
         /// <summary>사출~첫 발사까지 걸리는 시간. PlayerLoadout이 이만큼 먼저 Cast해서 첫 발사가 모션의 발사 시점과 맞게 함</summary>
         public const float C_SUMMON_LEAD = C_RISE + C_STAGGER * (C_COUNT - 1) + C_HOLD;
 
-        private IEnumerator RunC()
+        private async UniTaskVoid RunCAsync(CancellationToken _token)
         {
             var _gems = new Transform[C_COUNT];
             var _trails = new ParticleSystem[C_COUNT];
@@ -229,7 +264,7 @@ namespace HistoryCrash.Combat
             while (_fired < C_COUNT)
             {
                 float _t = Time.time - _born;
-                Vector3 _f = _player ? FacingDir() : _dir;
+                Vector3 _f = _player ? FacingDir() : _dir;   // 소환 중에도 지금 화면 방향을 따라감
                 var _rot = Quaternion.LookRotation(_f, Vector3.up);
                 Vector3 _chest = _player.position + Vector3.up * 0.9f;
                 for (int _i = _fired; _i < C_COUNT; _i++)
@@ -246,7 +281,7 @@ namespace HistoryCrash.Combat
                     }
                     float _u = Mathf.Clamp01(_ti / C_RISE);
                     float _e = 1f - (1f - _u) * (1f - _u) * (1f - _u);                  // 빠르게 튀어나와 감속
-                    Vector3 _slot = _player.position + _rot * _c_Slots[_i];
+                    Vector3 _slot = OutOfWall(_player.position + _rot * _c_Slots[_i], _f);
                     Vector3 _bob = Vector3.up * Mathf.Sin((_t + _i) * 6f) * 0.04f * _u;  // 떠 있는 흔들림
                     _gems[_i].position = Vector3.LerpUnclamped(_chest, _slot, _e) + _bob;
                     _gems[_i].rotation = _rot;
@@ -260,13 +295,13 @@ namespace HistoryCrash.Combat
                     var _g = _gems[_fired];
                     if (_trails[_fired]) { _trails[_fired].transform.SetParent(null, true); var _em = _trails[_fired].emission; _em.rateOverTime = 0; Destroy(_trails[_fired].gameObject, 0.6f); }
                     ElementFx.Burst(_element, _g.position, 0.6f, 12);
-                    StartCoroutine(Projectile(_g.position, _f, C_SPEED, C_RANGE, C_HIT, C_SIZE, Vector3.zero, false, 900f, _player.position.y + 0.35f));
+                    ProjectileAsync(_token, _g.position, _f, C_SPEED, C_RANGE, C_HIT, C_SIZE, Vector3.zero, false, 900f, _player.position.y + 0.35f).Forget();
                     Destroy(_g.gameObject);
                     _gems[_fired] = null; _fired++; _nextFire = _t + C_INTERVAL;   // 프레임이 튀어도 발사 간격 유지
                 }
-                yield return null;
+                if (await NextFrame(_token)) return;
             }
-            yield return new WaitForSeconds(C_RANGE / C_SPEED + 0.2f);
+            if (await UniTask.Delay(System.TimeSpan.FromSeconds(C_RANGE / C_SPEED + 0.2f), cancellationToken: _token).SuppressCancellationThrow()) return;
             Destroy(gameObject);
         }
 
@@ -277,7 +312,7 @@ namespace HistoryCrash.Combat
             return _d.sqrMagnitude > 1e-4f ? _d.normalized : _dir;
         }
 
-        private IEnumerator Projectile(Vector3 _start, Vector3 _d, float _speed, float _range, float _hitR, float _size, Vector3 _euler, bool _pierce, float _spin, float _dropToY = float.NaN, float _hitAhead = 0f)
+        private async UniTaskVoid ProjectileAsync(CancellationToken _token, Vector3 _start, Vector3 _d, float _speed, float _range, float _hitR, float _size, Vector3 _euler, bool _pierce, float _spin, float _dropToY = float.NaN, float _hitAhead = 0f)
         {
             float _startY = _start.y;
             var _holder = new GameObject("Shot").transform;
@@ -287,6 +322,8 @@ namespace HistoryCrash.Combat
             var _trail = ElementFx.Trail(_element, _holder, Mathf.Min(_size * 0.4f, 0.2f), 45f);
             float _traveled = 0f;
             bool _stop = false;
+            // 벽 가에는 플레이어가 들어설 수 있는 막힌 칸이 있음(최대 2.3 m). 플레이어가 그 안에서 쏘면 처음 3 m는 벽 판정 안 함
+            float _wallFrom = _player && Wall(_player.position) ? 3f : 0.6f;
             while (_traveled < _range && !_stop)
             {
                 // 프레임이 튀어 한 번에 많이 이동해도 머미를 건너뛰지 않도록 판정 반경 이하 간격으로 나눠 이동·판정
@@ -299,10 +336,10 @@ namespace HistoryCrash.Combat
                     if (!float.IsNaN(_dropToY)) { var _hp = _holder.position; _hp.y = Mathf.Lerp(_startY, _dropToY, Mathf.SmoothStep(0f, 1f, _traveled / 1.5f)); _holder.position = _hp; }
                     int _n = HitAround(_holder.position + _d * _hitAhead, _hitR, _d) + (_hitAhead > 0f ? HitAround(_holder.position, _hitR, _d) : 0);   // 긴 탄은 끝과 몸통 둘 다 판정
                     if (_n > 0 && !_pierce) _stop = true;
-                    else if (_traveled > 0.6f && Wall(_holder.position)) _stop = true;
+                    else if (_traveled > _wallFrom && WallDeep(_holder.position)) _stop = true;
                 }
                 if (_spin != 0f) _shape.Rotate(Vector3.forward, _spin * Time.deltaTime, Space.Self);
-                if (!_stop) yield return null;
+                if (!_stop) if (await NextFrame(_token)) return;
             }
             ElementFx.Burst(_element, _holder.position, 0.9f, 18);
             if (_trail) { _trail.transform.SetParent(null, true); var _em = _trail.emission; _em.rateOverTime = 0; Destroy(_trail.gameObject, 0.8f); }
@@ -314,7 +351,7 @@ namespace HistoryCrash.Combat
         // 이후 오브가 마법진 중앙으로 떨어져 범위 안 같은 속성 머미를 맞힘. 마법진 바깥 고리 = 실제 타격 범위.
         public const float D_GROW = 0.2f, D_HOVER = 0.55f, D_DRAW = 0.35f;
 
-        private IEnumerator RunD()
+        private async UniTaskVoid RunDAsync(CancellationToken _token)
         {
             Vector3 _ground = _player.position; _ground.y = FloorY;
             transform.position = _ground;
@@ -335,7 +372,7 @@ namespace HistoryCrash.Combat
                 float _d = Mathf.Clamp01(_t / D_DRAW);
                 float _pulse = 0.55f + 0.45f * Mathf.Abs(Mathf.Sin(_t * Mathf.Lerp(5f, 16f, _t / _wait)));
                 _circle.Set(_d, _pulse, _t);
-                yield return null;
+                if (await NextFrame(_token)) return;
             }
             for (float _t = 0; _t < D_FALL_TIME; _t += Time.deltaTime)
             {
@@ -343,7 +380,7 @@ namespace HistoryCrash.Combat
                 _sun.localPosition = Vector3.up * Mathf.Lerp(D_HEIGHT, D_SIZE * 0.4f, _u * _u);
                 _sun.Rotate(Vector3.up, 360f * Time.deltaTime, Space.World);
                 _circle.Set(1f, 1f, _wait + _t);
-                yield return null;
+                if (await NextFrame(_token)) return;
             }
             ElementFx.Impact(_ground, _c, new Color(0.3f, 0.27f, 0.2f, 0.55f), 1.6f);
             ElementFx.Burst(_element, _ground + Vector3.up * 0.3f, 1.8f, 40);
@@ -354,7 +391,7 @@ namespace HistoryCrash.Combat
             {
                 float _u = _t / 0.45f;
                 _circle.Set(1f, Mathf.Lerp(1.6f, 0f, _u), 1f + _t, 1f + _u * 0.08f);
-                yield return null;
+                if (await NextFrame(_token)) return;
             }
             Finish(_trail);
         }
@@ -437,7 +474,7 @@ namespace HistoryCrash.Combat
         /// <summary>소환~첫 사출까지 걸리는 시간. PlayerLoadout이 이만큼 먼저 Cast해서 사출을 모션 발사 시점에 맞춤</summary>
         public const float E_SUMMON_LEAD = E_RISE + E_HOLD;
 
-        private IEnumerator RunE()
+        private async UniTaskVoid RunEAsync(CancellationToken _token)
         {
             int _count = _e_Slots.Length;
             var _spears = new Transform[_count];
@@ -454,7 +491,7 @@ namespace HistoryCrash.Combat
             while (_fired < _count)
             {
                 float _t = Time.time - _born;
-                Vector3 _f = _player ? FacingDir() : _dir;
+                Vector3 _f = _player ? FacingDir() : _dir;   // 소환 중에도 지금 화면 방향을 따라감
                 var _rot = Quaternion.LookRotation(_f, Vector3.up);
                 Vector3 _chest = _player.position + Vector3.up * 0.9f;
                 float _u = Mathf.Clamp01(_t / E_RISE);
@@ -462,7 +499,7 @@ namespace HistoryCrash.Combat
                 Vector3 _cross = _player.position + _f * E_CROSS_DIST;   // 좌우 창이 겨냥하는 교차점
                 for (int _i = _fired; _i < _count; _i++)
                 {
-                    Vector3 _slot = _player.position + _rot * _e_Slots[_i];
+                    Vector3 _slot = OutOfWall(_player.position + _rot * _e_Slots[_i], _f);
                     Vector3 _aim = Vector3.ProjectOnPlane(_cross - _slot, Vector3.up).normalized;   // 안쪽으로 살짝 꺾인 방향
                     float _hold = E_HOLD + _i * E_GAP;   // 뒤에 쏘는 창은 그만큼 더 오래 당김
                     float _pull = _t > E_RISE ? Mathf.SmoothStep(0f, 1f, (_t - E_RISE) / _hold) * E_PULL : 0f;   // 사출 직전 뒤로 당김
@@ -477,13 +514,13 @@ namespace HistoryCrash.Combat
                     if (_trails[_fired]) { _trails[_fired].transform.SetParent(null, true); var _em = _trails[_fired].emission; _em.rateOverTime = 0; Destroy(_trails[_fired].gameObject, 0.6f); }
                     Destroy(_sp.gameObject);
                     ElementFx.Burst(_element, _start, 0.7f, 14);
-                    StartCoroutine(Projectile(_start, _f, E_SPEED, E_RANGE, E_HIT, E_SIZE, _e_Euler, true, 0f, _player.position.y + 0.5f, E_SIZE * 0.4f));   // 판정은 창끝·몸통
+                    ProjectileAsync(_token, _start, _f, E_SPEED, E_RANGE, E_HIT, E_SIZE, _e_Euler, true, 0f, _player.position.y + 0.5f, E_SIZE * 0.4f).Forget();   // 판정은 창끝·몸통
                     _fired++;
                     continue;   // 같은 프레임에 다음 창 조건도 바로 확인
                 }
-                yield return null;
+                if (await NextFrame(_token)) return;
             }
-            yield return new WaitForSeconds(E_RANGE / E_SPEED + 0.3f);
+            if (await UniTask.Delay(System.TimeSpan.FromSeconds(E_RANGE / E_SPEED + 0.3f), cancellationToken: _token).SuppressCancellationThrow()) return;
             Destroy(gameObject);
         }
     }

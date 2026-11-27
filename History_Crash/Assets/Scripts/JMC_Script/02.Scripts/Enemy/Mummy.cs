@@ -1,4 +1,5 @@
-using System.Collections;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Serialization;
 using HistoryCrash.Boss;
@@ -14,9 +15,9 @@ namespace HistoryCrash.Enemy
     /// <summary>
     /// 소환된 머미.
     /// - Player를 향해 Player 이동속도의 speedRatio(60%)로 달려든다(걷기 불가 칸·구멍은 피함).
-    /// - 살아 있는 동안 orbInterval초마다 Player 주변 orbRadius칸 안 바닥에 자기 속성 오브를 떨어뜨린다.
+    /// - 살아 있는 동안 (미라 전체에서 orbInterval초에 하나씩 돌아가며) Player 주변 orbRadius칸 안 바닥에 자기 속성 오브를 떨어뜨린다.
     /// - 같은 속성 공격 1회에 사망: 뒤에서 맞으면 Dying(앞으로 쓰러짐), 앞에서 맞으면 Death(뒤로 쓰러짐).
-    /// - 쓰러진 뒤 녹아내리듯 바닥으로 꺼지고, 영혼이 떠올라 파라오에게 날아가 체력을 깎는다.
+    /// - 쓰러진 뒤 위에 속성 구슬이 생기고, 시신이 조각으로 분해되어 구슬로 빨려 든 다음 구슬이 파라오에게 날아가 체력을 깎는다.
     /// </summary>
     public class Mummy : MonoBehaviour
     {
@@ -62,84 +63,81 @@ namespace HistoryCrash.Enemy
         [Header("사망")]
         [SerializeField, FormerlySerializedAs("deathAnimSpeed")] private float _deathAnimSpeed = 1.5f;
         [SerializeField, FormerlySerializedAs("deathHold")] private float _deathHold = 2.0f;
-        [SerializeField, FormerlySerializedAs("meltTime")] private float _meltTime = 1.4f;
-        [SerializeField, FormerlySerializedAs("meltDepth")] private float _meltDepth = 0.9f;
         [SerializeField, FormerlySerializedAs("pharaohDamage")] private int _pharaohDamage = 20;
         /// <summary>처치 시 파라오에게 주는 피해 (소환기가 채움)</summary>
         public int PharaohDamage { get => _pharaohDamage; set => _pharaohDamage = value; }
-        [SerializeField, FormerlySerializedAs("spiritRise")] private float _spiritRise = 1.4f;
-        [SerializeField, FormerlySerializedAs("spiritRiseTime")] private float _spiritRiseTime = 0.7f;
         [SerializeField, FormerlySerializedAs("spiritFlyTime")] private float _spiritFlyTime = 1.0f;
+
+        [Header("영혼 흡수 (시신이 조각나 구슬로 빨려 듦)")]
+        [SerializeField, Tooltip("구체가 생기는 높이 (바닥 기준 m)")] private float _soulHeight = 1.5f;
+        [SerializeField, Tooltip("구슬이 나타난 뒤 흡수음이 시작될 때까지 (초). 조각은 이때부터 이미 떨어져 나감")] private float _soulFormTime = 0.4f;
+        [SerializeField, Tooltip("흡수음 시작부터 다 빨려 들 때까지 (초)")] private float _absorbTime = 0.8f;
+        [SerializeField, Tooltip("다 빨아들인 구슬이 떠 있는 시간 (초)")] private float _soulPulseTime = 0.25f;
+        [SerializeField, Tooltip("시체에서 구체로 흘러가는 입자 수 (초당)")] private float _absorbParticleRate = 60f;
+        private SkinnedMeshRenderer _bodySmr;
 
         public bool IsAlive { get; private set; } = true;
         public bool Active { get; private set; }
         private float _nextOrb;
-        private MaterialPropertyBlock _mpb;
+        private static float s_nextDrop;   // 미라 전체에서 다음 오브를 떨굴 수 있는 시각
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetDrop() { s_nextDrop = 0f; }
 
         private static readonly System.Collections.Generic.List<Mummy> _alive = new System.Collections.Generic.List<Mummy>();
         public static System.Collections.Generic.List<Mummy> Alive => _alive;
 
         private void OnEnable() { _alive.Add(this); }
-        private void OnDisable() { _alive.Remove(this); }
+        private void OnDisable()
+        {
+            _alive.Remove(this);
+            // 게임이 끝나 소환기와 함께 꺼지면 죽는 연출도 코루틴처럼 멈춘다
+            if (_dieCts != null) { _dieCts.Cancel(); _dieCts.Dispose(); _dieCts = null; }
+        }
+
+        private CancellationTokenSource _dieCts;
 
         public void Init(MummyGender _g, Element _e)
         {
             _gender = _g; _element = _e;
             ApplyElementLook();
+            MummyDissolve.Prepare(_bodySmr);
         }
 
         private void ApplyElementLook()
         {
-            if (!_shellRenderer) return;
-            _mpb = _mpb ?? new MaterialPropertyBlock();
-            _shellRenderer.GetPropertyBlock(_mpb);
-            // 주변을 비추는 광원 없이, 머미 자신에게만 속성색을 입힌다
             Color _c = ElementInfo.Color(_element);
-            _mpb.SetColor("_EmissionColor", _c * 5f);
-            _mpb.SetColor("_BaseColor", new Color(_c.r, _c.g, _c.b, 0.42f));
-            _shellRenderer.SetPropertyBlock(_mpb);
-            // 붕대(몸)도 속성색으로 물들임
+            // 미라 모습은 속성과 관계없이 기본형 그대로(속성색 에너지 껍질·불티·머리 위 구슬 없음) — 속성색은 몸 테두리(아웃라인)로만 표시
+            if (_shellRenderer) _shellRenderer.enabled = false;
+            AddOutline(_c);
+        }
+
+        [Header("속성 아웃라인")]
+        [SerializeField, Tooltip("몸 테두리 두께(m)")] private float _outlineWidth = 0.012f;
+        [SerializeField, Tooltip("테두리 색 밝기(1보다 작으면 속성색보다 어둡게, 1보다 크면 블룸으로 빛남)")] private float _outlineIntensity = 0.7f;
+        private const string OUTLINE_SHADER = "HistoryCrash_Outline";   // Assets/Shaders/Resources/
+        private static Shader _outlineShader;
+        private Material _outlineMat;
+
+        // 몸 렌더러의 머티리얼 칸 뒤에 아웃라인 머티리얼을 하나 더 붙임(원래 머티리얼은 그대로)
+        private void AddOutline(Color _c)
+        {
+            if (!_outlineShader) _outlineShader = Resources.Load<Shader>(OUTLINE_SHADER);
+            if (!_outlineShader) { Debug.LogWarning("[Mummy] 아웃라인 셰이더를 찾지 못했습니다: Resources/" + OUTLINE_SHADER, this); return; }
+            _outlineMat = new Material(_outlineShader) { name = "MummyOutline_" + ElementInfo.Name(_element) };
+            _outlineMat.SetColor("_OutlineColor", _c * _outlineIntensity);
+            _outlineMat.SetFloat("_OutlineWidth", _outlineWidth);
             foreach (var _r in GetComponentsInChildren<SkinnedMeshRenderer>())
             {
                 if (_r == _shellRenderer) continue;
-                var _b = new MaterialPropertyBlock(); _r.GetPropertyBlock(_b);
-                _b.SetColor("_BaseColor", Color.Lerp(Color.white, _c, 0.45f));
-                _r.SetPropertyBlock(_b);
+                _bodySmr = _r;
+                var _mats = _r.sharedMaterials;
+                System.Array.Resize(ref _mats, _mats.Length + 1);
+                _mats[_mats.Length - 1] = _outlineMat;
+                _r.sharedMaterials = _mats;
             }
-            // 몸 주위에서 피어오르는 속성 불티
-            var _aura = ElementFx.Trail(_element, transform, 0.11f, 35f);
-            _aura.transform.localPosition = new Vector3(0, 0.45f, 0);
-            var _am = _aura.main; _am.gravityModifier = -0.35f; _am.startLifetime = new ParticleSystem.MinMaxCurve(0.5f, 0.9f);
-            var _ash = _aura.shape; _ash.radius = 0.22f;
-            // 머리 위 속성 표식(작게 빛나는 구슬)
-            _head = FindDeep(transform, "Head");
-            _marker = GameObject.CreatePrimitive(PrimitiveType.Sphere).transform;
-            Destroy(_marker.GetComponent<Collider>());
-            _marker.name = "ElementMarker"; _marker.SetParent(transform, true);
-            _marker.localScale = Vector3.one * _markerSize;
-            _marker.GetComponent<Renderer>().sharedMaterial = ElementFx.GlowMat(_element, 6f);
-            _marker.GetComponent<Renderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         }
 
-        [Header("속성 표시")]
-        [SerializeField, FormerlySerializedAs("markerSize")] private float _markerSize = 0.09f;
-        [SerializeField, FormerlySerializedAs("markerHeight")] private float _markerHeight = 0.28f;
-        private Transform _head, _marker;
-
-        private static Transform FindDeep(Transform _t, string _name)
-        {
-            if (_t.name == _name) return _t;
-            foreach (Transform _c in _t) { var _r = FindDeep(_c, _name); if (_r) return _r; }
-            return null;
-        }
-
-        private void LateUpdate()
-        {
-            if (!_marker) return;
-            Vector3 _basePos = _head ? _head.position : transform.position + Vector3.up * 1f;
-            _marker.position = _basePos + Vector3.up * (_markerHeight + Mathf.Sin(Time.time * 3f + GetInstanceID()) * 0.03f);
-            if (!IsAlive) _marker.gameObject.SetActive(false);
-        }
+        private void OnDestroy() { if (_outlineMat) Destroy(_outlineMat); }
 
         /// <summary>소환 연출(바닥에서 솟아오름)이 끝나면 호출</summary>
         public void Activate()
@@ -147,7 +145,9 @@ namespace HistoryCrash.Enemy
             Active = true;
             _nextOrb = Time.time + _orbInterval;
             if (_animator) _animator.Play("Walk", 0, Random.value);
+            _walkSfx = HistoryCrash.Sound.GameSfx.Play("Mummy_Walk", transform, 0f, true);
         }
+        private HistoryCrash.Sound.GameSfx.Voice _walkSfx;   // 걷는 동안 반복
 
         private void Update()
         {
@@ -184,13 +184,19 @@ namespace HistoryCrash.Enemy
                 var _target = Quaternion.LookRotation(_dir, Vector3.up);
                 transform.rotation = Quaternion.RotateTowards(transform.rotation, _target, _turnSpeed * Time.deltaTime);
             }
+            HistoryCrash.Sound.GameSfx.SetGain(_walkSfx, _moved > 0.05f ? 1f : 0f);
             if (_animator) _animator.speed = Mathf.Clamp(_moved / Mathf.Max(_walkClipSpeed, 0.01f), 0.6f, _maxWalkAnimSpeed);
 
             // 접촉 피해(기획: 1). PlayerHealth의 피격 무적이 연속 피해를 막는다.
             if (_contactDamage > 0 && _playerHealth != null && _dist < _radius + 0.3f && _playerJump != null && _playerJump.GetHeightAboveGround() < 0.3f)
                 _playerHealth.TakeDamage(new DamageInfo(_contactDamage, ElementType.None, gameObject));
 
-            if (Time.time >= _nextOrb) { _nextOrb = Time.time + _orbInterval; DropOrbNearPlayer(); }
+            // 오브는 미라마다가 아니라 전체에서 _orbInterval에 하나. 가장 오래 기다린 미라가 떨궈 속성이 돌아가며 나온다
+            if (Time.time >= _nextOrb && Time.time >= s_nextDrop && IsNextDropper())
+            {
+                _nextOrb = s_nextDrop = Time.time + _orbInterval;
+                DropOrbNearPlayer();
+            }
         }
 
         private bool Blocked(Vector3 _pos, float _sx, float _sz)
@@ -199,6 +205,12 @@ namespace HistoryCrash.Enemy
             Vector3 _probe = _pos + new Vector3(_sx * _radius, 0, _sz * _radius);
             var _c = _grid.WorldToCell(_probe);
             return !_grid.IsSolid(_c);
+        }
+
+        private bool IsNextDropper()
+        {
+            foreach (var _o in _alive) if (_o && _o != this && _o.IsAlive && _o.Active && _o._nextOrb < _nextOrb) return false;
+            return true;
         }
 
         private void DropOrbNearPlayer()
@@ -214,7 +226,7 @@ namespace HistoryCrash.Enemy
                 }
             if (_list.Count == 0) return;
             var _cell = _list[Random.Range(0, _list.Count)];
-            // 오브 수명 = 드랍 주기: 머미 한 마리당 바닥에 오브가 하나씩만 있게(우후죽순 방지)
+            // 오브 수명 = 드랍 주기: 바닥에 오브가 하나씩만 있게(우후죽순 방지)
             ElementOrb.Spawn(_element, _cell, _grid, _orbInterval);
         }
 
@@ -222,67 +234,147 @@ namespace HistoryCrash.Enemy
         public bool TryHit(Element _attack, Vector3 _travelDir)
         {
             if (!IsAlive || !Active || _attack != _element) return false;
+            if (!isActiveAndEnabled) return false;   // 게임이 끝나 꺼진 머미는 맞지 않음
             IsAlive = false;
-            StartCoroutine(Die(_travelDir));
+            _dieCts = CancellationTokenSource.CreateLinkedTokenSource(destroyCancellationToken);
+            DieAsync(_travelDir, _dieCts.Token).Forget();
             return true;
         }
 
-        private IEnumerator Die(Vector3 _travelDir)
+        private async UniTaskVoid DieAsync(Vector3 _travelDir, CancellationToken _token)
         {
             _travelDir.y = 0;
+            HistoryCrash.Sound.GameSfx.FadeOut(_walkSfx, 0.15f);
+            HistoryCrash.Sound.GameSfx.Play("Mummy_Death", transform.position);
             // 공격이 머미의 등 쪽에서 와서 앞으로 진행하면 뒤에서 맞은 것 → 앞으로 쓰러짐(Dying)
             bool _fromBehind = Vector3.Dot(transform.forward, _travelDir.normalized) > 0f;
             string _state = _fromBehind ? "Dying" : "Death";
             ElementFx.Burst(_element, transform.position + Vector3.up * 0.6f, 1.2f, 30);
             if (_animator) { _animator.speed = _deathAnimSpeed; _animator.CrossFadeInFixedTime(_state, 0.08f); }
             Debug.Log("[Mummy] " + _gender + " " + ElementInfo.Name(_element) + " hit from " + (_fromBehind ? "behind → Dying" : "front → Death"));
-            yield return new WaitForSeconds(_deathHold);
+            if (await UniTask.Delay(System.TimeSpan.FromSeconds(_deathHold), cancellationToken: _token).SuppressCancellationThrow()) return;
 
-            // 녹아내림: 바닥 아래로 꺼지며 납작해지고, 속성색 불꽃이 바닥에서 피어오름
-            ElementFx.Flame(_element, new Vector3(transform.position.x, _grid ? _grid.FloorTopY : transform.position.y, transform.position.z), _meltTime, 0.4f);
-            Vector3 _start = transform.position; Vector3 _scale0 = transform.localScale;
-            for (float _t = 0; _t < _meltTime; _t += Time.deltaTime)
-            {
-                float _u = _t / _meltTime; float _e = _u * _u;
-                transform.position = _start - Vector3.up * _meltDepth * _e;
-                transform.localScale = new Vector3(_scale0.x * (1f + 0.25f * _e), _scale0.y * (1f - 0.7f * _e), _scale0.z * (1f + 0.25f * _e));
-                yield return null;
-            }
+            // 1) 쓰러진 시신 위에 속성 구슬이 생기고, 시신이 손발 끝부터 조각나 빨려 들며 구슬이 커짐
+            if (_animator) _animator.speed = 0f;   // 쓰러진 자세 그대로 멈춤
+            var _bodyRenderers = GetComponentsInChildren<Renderer>();
+            Bounds _body = BodyBounds();
+            float _floorY = _grid ? _grid.FloorTopY : transform.position.y;
+            Vector3 _soulPos = new Vector3(_body.center.x, _floorY + _soulHeight, _body.center.z);
 
-            // 영혼: 떠오른 뒤 파라오에게 날아감
             var _spirit = new GameObject("Mummy_Spirit_" + ElementInfo.Name(_element));
-            _spirit.transform.position = new Vector3(_start.x, (_grid ? _grid.FloorTopY : _start.y) + 0.3f, _start.z);
+            _spirit.transform.position = _soulPos;
             var _core = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             Destroy(_core.GetComponent<Collider>());
-            _core.transform.SetParent(_spirit.transform, false); _core.transform.localScale = Vector3.one * 0.16f;
+            _core.transform.SetParent(_spirit.transform, false); _core.transform.localScale = Vector3.zero;
             _core.GetComponent<Renderer>().sharedMaterial = ElementFx.GlowMat(_element, 6f);
             ElementFx.Trail(_element, _spirit.transform, 0.22f, 90f);
-            ElementFx.Glow(_element, _spirit.transform, 2.5f, 3f);
-            foreach (var _r in GetComponentsInChildren<Renderer>()) _r.enabled = false;
+            var _light = ElementFx.Glow(_element, _spirit.transform, 0f, 3f);
 
-            Vector3 _a = _spirit.transform.position, _b = _a + Vector3.up * _spiritRise;
-            for (float _t = 0; _t < _spiritRiseTime; _t += Time.deltaTime)
+            // 파라오 피격 소리는 1.2초쯤 가장 커지므로, 영혼이 닿는 순간에 맞춰 먼저 시작
+            float _untilHit = _soulFormTime + _absorbTime + _soulPulseTime + _spiritFlyTime;
+            if (_pharaoh) HistoryCrash.Sound.GameSfx.Play("Pharaoh_Attacked", _pharaoh, Mathf.Max(0f, _untilHit - 1.2f), false, true);
+
+            const float CORE_SIZE = 0.16f;
+            float _eatTime = _soulFormTime + _absorbTime;
+            MummyDissolve.Create(_bodySmr, _soulPos, ElementInfo.Color(_element), ElementInfo.Color(_element) * _outlineIntensity, _outlineWidth, _eatTime);
+            foreach (var _r in _bodyRenderers) if (_r) _r.enabled = false;
+            var _stream = AbsorbStream(_body);
+            bool _sounded = false;
+            for (float _t = 0; _t < _eatTime; _t += Time.deltaTime)
             {
-                float _u = _t / _spiritRiseTime; _u = 1f - (1f - _u) * (1f - _u);
-                _spirit.transform.position = Vector3.Lerp(_a, _b, _u) + new Vector3(Mathf.Sin(_t * 9f) * 0.05f, 0, 0);
-                yield return null;
+                float _u = _t / _eatTime;
+                // 흡수음: 시작 0.8초 뒤(다 삼키는 순간)에 가장 커지도록 편집된 파일
+                if (!_sounded && _t >= _soulFormTime) { _sounded = true; HistoryCrash.Sound.GameSfx.Play("Mummy_SoulAbsorb", _soulPos); }
+                if (_u > 0.75f) { var _streamEm = _stream.emission; _streamEm.rateOverTime = 0f; }
+                _core.transform.localScale = Vector3.one * CORE_SIZE * Mathf.Min(1f, _t / 0.1f) * Mathf.Lerp(0.35f, 1f, Mathf.SmoothStep(0f, 1f, _u));
+                _light.intensity = Mathf.Lerp(0.8f, 2.5f, _u);
+                PullParticles(_stream, _soulPos, _u);
+                if (await UniTask.Yield(_token).SuppressCancellationThrow()) return;
             }
+
+            // 2) 다 삼킨 구슬이 잠깐 떠 있음(움찔·번쩍 없음)
+            for (float _t = 0; _t < _soulPulseTime; _t += Time.deltaTime)
+            {
+                PullParticles(_stream, _soulPos, 1f);
+                if (await UniTask.Yield(_token).SuppressCancellationThrow()) return;
+            }
+            Destroy(_stream.gameObject);
+
+            // 3) 파라오에게 날아감
+            Vector3 _b = _soulPos;
             Vector3 _target = _pharaoh ? PharaohCenter() : _b + Vector3.up;
             Vector3 _mid = (_b + _target) * 0.5f + Vector3.up * 1.6f;
+            // 비행음: 비행 시간(1.0초)과 같은 길이로 편집, 구체를 따라감
+            HistoryCrash.Sound.GameSfx.Play("Mummy_SoulFly", _spirit.transform);
             for (float _t = 0; _t < _spiritFlyTime; _t += Time.deltaTime)
             {
                 float _u = _t / _spiritFlyTime; _u = _u * _u * (3f - 2f * _u);
                 if (_pharaoh) _target = PharaohCenter();
                 Vector3 _q = Vector3.Lerp(Vector3.Lerp(_b, _mid, _u), Vector3.Lerp(_mid, _target, _u), _u);
                 _spirit.transform.position = _q;
-                yield return null;
+                if (await UniTask.Yield(_token).SuppressCancellationThrow()) return;
             }
             ElementFx.Burst(_element, _target, 1.6f, 40);
+            HistoryCrash.Sound.GameSfx.Play("Mummy_SoulHit", _target);
             if (_pharaohHealth != null) _pharaohHealth.TakeDamage(new DamageInfo(_pharaohDamage, ElementType.None, gameObject));   // 미라 1킬 = 파라오 피해 (기획 v20: 20, 소환기에서 조정)
             var _trail = _spirit.GetComponentInChildren<ParticleSystem>();
             if (_trail) { _trail.transform.SetParent(null, true); var _em = _trail.emission; _em.rateOverTime = 0; Destroy(_trail.gameObject, 1f); }
             Destroy(_spirit);
             Destroy(gameObject);
+        }
+
+        // 쓰러진 몸의 실제 범위(뼈 기준). 렌더러 bounds는 넉넉한 상자라 중심이 몸에서 1m쯤 벗어남
+        private Bounds BodyBounds()
+        {
+            Transform[] _bones = _bodySmr.bones;
+            Bounds _b = new Bounds(_bones[0].position, Vector3.zero);
+            foreach (var _t in _bones) if (_t) _b.Encapsulate(_t.position);
+            return _b;
+        }
+
+        // 시체 둘레에서 속성색 입자가 생겨 구체로 흘러감 (속도는 PullParticles가 매 프레임 구체 쪽으로 맞춤)
+        private ParticleSystem AbsorbStream(Bounds _body)
+        {
+            Color _c = ElementInfo.Color(_element);
+            var _go = new GameObject("Fx_SoulAbsorb_" + _element);
+            _go.transform.position = _body.center;
+            var _ps = _go.AddComponent<ParticleSystem>();
+            _ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            var _main = _ps.main;
+            _main.maxParticles = 400; _main.loop = true; _main.playOnAwake = false;
+            _main.simulationSpace = ParticleSystemSimulationSpace.World;
+            _main.startLifetime = 2f; _main.startSpeed = 0f;
+            _main.startSize = new ParticleSystem.MinMaxCurve(0.02f, 0.055f);
+            _main.startColor = new ParticleSystem.MinMaxGradient(Color.Lerp(_c, Color.white, 0.5f), _c);
+            var _em = _ps.emission; _em.rateOverTime = _absorbParticleRate;
+            var _sh = _ps.shape; _sh.shapeType = ParticleSystemShapeType.Box; _sh.scale = _body.size;
+            var _r = _go.GetComponent<ParticleSystemRenderer>();
+            _r.sharedMaterial = ElementFx.ParticleMat();
+            _r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            _ps.Play();
+            return _ps;
+        }
+
+        private static ParticleSystem.Particle[] _absorbBuffer;
+
+        // 입자를 구체 쪽으로 끌어당김. 빨려 드는 후반(_u→1)일수록 빨라지고, 구체에 닿으면 사라짐
+        private static void PullParticles(ParticleSystem _ps, Vector3 _soul, float _u)
+        {
+            if (_absorbBuffer == null || _absorbBuffer.Length < _ps.main.maxParticles) _absorbBuffer = new ParticleSystem.Particle[_ps.main.maxParticles];
+            int _n = _ps.GetParticles(_absorbBuffer);
+            for (int _i = 0; _i < _n; _i++)
+            {
+                Vector3 _d = _soul - _absorbBuffer[_i].position;
+                float _dist = _d.magnitude;
+                float _age = _absorbBuffer[_i].startLifetime - _absorbBuffer[_i].remainingLifetime;
+                float _speed = Mathf.Lerp(1.2f, 7f, Mathf.Clamp01(_age * 1.5f + _u * 0.5f));
+                // 이번 프레임에 구체까지 닿을 거리면 지나치지 않게 여기서 사라지게 함
+                if (_dist < 0.12f + _speed * Time.deltaTime) { _absorbBuffer[_i].remainingLifetime = 0f; continue; }
+                // 살짝 휘감아 들어가도록 옆 방향 성분을 섞음
+                Vector3 _side = Vector3.Cross(_d / _dist, Vector3.up) * 0.6f;
+                _absorbBuffer[_i].velocity = (_d / _dist + _side).normalized * _speed;
+            }
+            _ps.SetParticles(_absorbBuffer, _n);
         }
 
         private Vector3 PharaohCenter()

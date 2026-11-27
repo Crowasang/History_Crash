@@ -20,8 +20,8 @@ public class SoundManager : MonoBehaviour
 {
     [Header("Volume")]
     [Range(0f, 1f)] [SerializeField] private float _masterVolume = 1f;
-    [Range(0f, 1f)] [SerializeField] private float _bgmVolume = 0.7f;
-    [Range(0f, 1f)] [SerializeField] private float _sfxVolume = 1f;
+    [Range(0f, 1f)] [SerializeField] private float _bgmVolume = 0.5f;
+    [Range(0f, 1f)] [SerializeField] private float _sfxVolume = 0.5f;
 
     [Header("Options")]
     [Tooltip("씬이 바뀌어도 유지")]
