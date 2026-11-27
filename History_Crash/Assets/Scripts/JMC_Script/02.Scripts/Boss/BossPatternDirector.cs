@@ -421,6 +421,8 @@ namespace HistoryCrash.Boss
 
         private void Update()
         {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            // 테스트용 단축키(1~5 다음 패턴 지정, P 자동 반복 켜기·끄기). 정식 빌드에서는 빠짐
             var _kb = Keyboard.current;
             if (_kb != null)
             {
@@ -431,6 +433,7 @@ namespace HistoryCrash.Boss
                 if (_kb.digit5Key.wasPressedThisFrame) _queued = 4;
                 if (_kb.pKey.wasPressedThisFrame) _autoLoop = !_autoLoop;
             }
+#endif
 
             // 파라오는 Player 쪽으로 몸을 돌림
             if (_pharaoh)
