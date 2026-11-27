@@ -335,6 +335,7 @@ namespace HistoryCrash.Cutscene
                 if (_kb.rightArrowKey.wasPressedThisFrame || _kb.dKey.wasPressedThisFrame) _sel = 1;
                 if (_kb.enterKey.wasPressedThisFrame || _kb.numpadEnterKey.wasPressedThisFrame) { Choose(_sel); return; }
             }
+            if (_sel != _heard) { if (_heard >= 0) PlayHover(); _heard = _sel; }   // 고른 항목이 바뀔 때만(메뉴가 처음 뜰 때는 조용히)
             float _k = 1f - Mathf.Exp(-14f * Time.unscaledDeltaTime);
             for (int i = 0; i < _items.Length; i++)
             {
@@ -345,6 +346,13 @@ namespace HistoryCrash.Cutscene
         }
 
         // 0 = Main Menu, 1 = Retry
+        private int _heard = -1; private AudioClip _hoverClip;
+        private void PlayHover()   // 메인메뉴·설정창과 같은 호버 소리
+        {
+            if (!_hoverClip) _hoverClip = Resources.Load<AudioClip>("UI/Settings/UI_Settings_Hover");
+            if (_hoverClip && SoundManager.Instance) SoundManager.Instance.PlaySfx(_hoverClip, 0.6f);
+        }
+
         private void Choose(int _i) { if (_leaving) return; _sel = _i; _leaving = true; LeaveAsync(_i == 1, destroyCancellationToken).Forget(); }
 
         private async UniTaskVoid LeaveAsync(bool _retry, CancellationToken _token)
