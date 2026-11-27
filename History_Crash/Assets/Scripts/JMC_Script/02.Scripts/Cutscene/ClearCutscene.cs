@@ -434,6 +434,7 @@ namespace HistoryCrash.Cutscene
             _spreadG = _spread.gameObject.AddComponent<CanvasGroup>(); _spreadG.alpha = 0f;
             Tex("SpreadMask", _spread, "Clear_SpreadMask", 0, 0, 1920, 1080);
             _full = Tex("SpreadFull", _spread, "Clear_Spread", 0, 0, 1920, 1080);
+            _full.material = MainMenuController.NewParchment("Clear_Parchment");   // 인트로·설정창 도감과 같은 밝은 페이지(그림이 인트로 펼침면과 같음)
             // 삽화 칸 480x600(인트로와 같은 자리) + 바깥 효과: 먹 번짐 → 종이로 번지는 빛 → 붓자국 가장자리 그림
             var _ish = Resources.Load<Shader>(RES + "Clear_Illust"); var _mask = Resources.Load<Texture2D>(RES + "Clear_IllMask");
             _flip = new[] { Resources.Load<Texture2D>(RES + "Clear_Purify_0"), Resources.Load<Texture2D>(RES + "Clear_Purify_1"), Resources.Load<Texture2D>(RES + "Clear_Purify_2") };
