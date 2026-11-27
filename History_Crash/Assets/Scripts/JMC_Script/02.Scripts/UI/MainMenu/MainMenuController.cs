@@ -150,6 +150,8 @@ namespace HistoryCrash.UI
         private readonly List<CanvasGroup> _pageGroups = new List<CanvasGroup>();   // 0 = 조작법, 1~ = 튜토리얼
         private CanvasGroup _skipGroup;     // 조작법·튜토리얼 장 오른쪽 아래 '튜토리얼 건너뛰기'
         private bool _skipTutorial;
+        private CanvasGroup _allSkipGroup;  // 이야기 장 오른쪽 아래 '모두 건너뛰기'
+        private bool _allSkip;
 
         private void Awake()
         {
@@ -225,11 +227,13 @@ namespace HistoryCrash.UI
                 var _p = _vp[_front];
                 long _hold = (long)_p.frameCount - HOLD_BEFORE_END;      // 영상 끝의 암전 직전 장면에서 멈춤
                 // 건너뛰기는 우측 책갈피(Skip)를 눌렀을 때만 — 아무 데나 클릭해도 넘어가지 않음
-                _skipIntro = _testFromIntroEnd;
-                ShowBookmark(true);
+                _skipIntro = _testFromIntroEnd; _allSkip = false;
+                ShowBookmark(true); ShowAllSkip(true);
                 while (_p.isPlaying && _p.frame < _hold)
                 {
-                    if (_skipIntro)                                        // 마지막 장면(나레이션이 다 쌓인 쪽)으로 — 소리도 같은 자리로
+                    var _kbEsc = Keyboard.current;
+                    if (_kbEsc != null && _kbEsc.escapeKey.wasPressedThisFrame) SkipAll();
+                    if (_skipIntro)                                       // 마지막 장면(나레이션이 다 쌓인 쪽)으로 — 소리도 같은 자리로
                     {
                         _p.frame = _hold;
                         var _src = _as[_front]; if (_src.clip) _src.time = Mathf.Clamp(_hold / (float)_p.frameRate, 0f, _src.clip.length - 0.01f);
@@ -243,8 +247,9 @@ namespace HistoryCrash.UI
                 // 장 번호: 0 = 이야기, 1 = 조작법, 2~ = 튜토리얼. 우측 = 다음 장, 좌측 = 이전 장
                 int _page = 0, _lastPage = _pageGroups.Count;
                 _skipTutorial = false;
-                while (true)
+                while (!_allSkip)                                                // 모두 건너뛰기: 이야기 장에서 바로 게임으로
                 {
+                    ShowAllSkip(_page == 0);
                     ShowSkip(_page >= 1 && _page < _lastPage);                   // 마지막 장은 '모험 시작'이 있으므로 건너뛰기 없음
                     await WaitBookmarkAsync(_page == _lastPage ? 2 : 1, _page > 0, _token);
                     ShowSkip(false);
@@ -263,9 +268,18 @@ namespace HistoryCrash.UI
                         _page++;
                     }
                 }
-                ShowBookmark(false);
+                ShowBookmark(false); ShowAllSkip(false);
                 // 지금 장 글자가 걷힘 → (게임 씬으로) 도감이 줌아웃되며 뒤로 게임 화면, 책이 덮여 아래로 내려감
-                await FadeGroupAsync(_pageGroups[_page - 1], 1f, 0f, 0.45f, _token);
+                if (_page > 0) await FadeGroupAsync(_pageGroups[_page - 1], 1f, 0f, 0.45f, _token);
+                else
+                {
+                    // 이야기 장(영상)에서 바로: 빈 도감을 위에 겹쳐 그림·글자가 걷히는 것처럼
+                    foreach (var _pg in new[] { _oldLeft, _oldRight, _flipFront, _flipBack }) _pg.gameObject.SetActive(false);
+                    foreach (var _g in _pageGroups) _g.alpha = 0f;
+                    _newSpread.texture = _bookSpread; SetAlpha(_newSpread, 0f);
+                    _book.gameObject.SetActive(true);
+                    await FadeAsync(_newSpread, 0f, 1f, 0.45f, _token);
+                }
                 foreach (var _src in _as) if (_src && _src.isPlaying) _src.DOFade(0f, 0.5f).SetUpdate(true).SetLink(gameObject);   // 게임으로 넘어가며 소리도 잦아듦
                 if (_loopSrc && _loopSrc.isPlaying) _loopSrc.DOFade(0f, 0.5f).SetUpdate(true).SetLink(gameObject);
                 BookToGameTransition.Create(_bookSpread);
@@ -595,6 +609,17 @@ namespace HistoryCrash.UI
         /// <summary>튜토리얼 건너뛰기: 남은 장을 넘기지 않고 바로 게임 씬으로</summary>
         public void SkipTutorial() { if (_skipGroup && _skipGroup.interactable) { _skipTutorial = true; _bookmarkClicked = true; _choseBack = false; } }
 
+        /// <summary>모두 건너뛰기: 이야기·조작법·튜토리얼을 모두 넘기고 바로 게임 씬으로(이야기 장에서만 보임)</summary>
+        public void SkipAll() { if (_allSkipGroup && _allSkipGroup.interactable) { _allSkip = _skipIntro = _skipTutorial = true; _bookmarkClicked = true; _choseBack = false; } }
+
+        private void ShowAllSkip(bool _on)
+        {
+            if (!_allSkipGroup) return;
+            _allSkipGroup.DOKill();
+            _allSkipGroup.interactable = _allSkipGroup.blocksRaycasts = _on;
+            _allSkipGroup.DOFade(_on ? 1f : 0f, 0.25f).SetUpdate(true).SetLink(_allSkipGroup.gameObject);
+        }
+
         private void ShowSkip(bool _on)
         {
             if (!_skipGroup) return;
@@ -620,6 +645,7 @@ namespace HistoryCrash.UI
                 if (_kb != null && (_kb.enterKey.wasPressedThisFrame || _kb.numpadEnterKey.wasPressedThisFrame || _kb.spaceKey.wasPressedThisFrame || _kb.rightArrowKey.wasPressedThisFrame)) { _choseBack = false; break; }
                 if (_allowBack && _kb != null && _kb.leftArrowKey.wasPressedThisFrame) { _choseBack = true; break; }
                 if (_kb != null && _kb.escapeKey.wasPressedThisFrame && _skipGroup && _skipGroup.interactable) { _skipTutorial = true; _choseBack = false; break; }
+                if (_kb != null && _kb.escapeKey.wasPressedThisFrame && _allSkipGroup && _allSkipGroup.interactable) { SkipAll(); break; }
                 await NextFrame(_token);
             }
             _bookmarkClicked = false;
@@ -645,6 +671,14 @@ namespace HistoryCrash.UI
             _backRibbon.texture = GameLanguage.IsKorean ? _ribbonBackKo : _ribbonBackEn;
             SetNextRibbon(0);
             _backGroup.alpha = 0f; _backGroup.interactable = _backGroup.blocksRaycasts = false;
+
+            // 모두 건너뛰기(우측 페이지 아래 잉크 글씨, 누르거나 Esc) — 이야기 장에서만
+            _allSkipGroup = new GameObject("AllSkip", typeof(RectTransform), typeof(CanvasGroup)).GetComponent<CanvasGroup>();
+            var _ar = (RectTransform)_allSkipGroup.transform; _ar.SetParent(_box, false); Stretch(_ar);
+            var _all = BookText(_ar, GameLanguage.T("모두 건너뛰기 (Esc)  »", "Skip all (Esc)  »"), new Vector2(1590f, 955f), 27f, TextAlignmentOptions.MidlineRight, 460f);
+            ApplyFont(_all, 27f); _all.raycastTarget = true;
+            var _allBm = _all.gameObject.AddComponent<MainMenuBookmark>(); _allBm.Clicked = SkipAll; _allBm.Hovered = PlayHover;
+            _allSkipGroup.alpha = 0f; _allSkipGroup.interactable = _allSkipGroup.blocksRaycasts = false;
 
             _bookmarkGroup.alpha = 0f; _bookmarkGroup.interactable = _bookmarkGroup.blocksRaycasts = false;
             _box.gameObject.SetActive(false);
